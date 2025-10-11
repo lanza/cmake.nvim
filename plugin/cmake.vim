@@ -345,10 +345,6 @@ function s:get_cmake_argument_string()
   return l:command
 endfunction
 
-function s:cmdb_configure_and_generate()
-  exec 'CMDB ' . s:get_cmake_argument_string()
-endfunction
-
 function g:CMake_configure_and_generate()
   call s:cmake_configure_and_generate()
 endfunction
@@ -981,7 +977,6 @@ command! -nargs=1 -complete=shellcmd CMakeSetBuildDir call s:cmake_update_build_
 command! -nargs=1 -complete=shellcmd CMakeSetSourceDir call s:cmake_update_source_dir(<f-args>)
 
 command! -nargs=0  CMakeConfigureAndGenerate call s:cmake_configure_and_generate()
-command! -nargs=1 -complete=shellcmd CMDBConfigureAndGenerate call s:cmdb_configure_and_generate()
 
 command! -nargs=0 CMakeDebugWithNvimLLDB call s:cmake_debug_current_target_lldb()
 command! -nargs=0 CMakeDebugWithNvimGDB call s:cmake_debug_current_target_gdb()
