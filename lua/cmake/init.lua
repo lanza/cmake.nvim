@@ -162,8 +162,10 @@ function M._do_build_all_with_completion(action)
   end
 end
 
+M.parse_codemodel_json_with_completion = vim.fn["g:cmake#ParseCodeModelJsonWithCompletion"]
+
 function M.cmake_build_all_with_completion(action)
-  vim.fn["g:cmake#ParseCodeModelJsonWithCompletion"](function()
+  M.parse_codemodel_json_with_completion(function()
     M._do_build_all_with_completion(action)
     action()
   end)
@@ -178,9 +180,11 @@ function M._do_cmake_pick_executable_target(pairs)
   M.dump_current_target()
 end
 
-function M._do_cmake_pick_target()
-  M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M.select_target)
-  M.dump_current_target()
+function M.cmake_pick_target()
+  M.parse_codemodel_json_with_completion(function()
+    M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M.select_target)
+    M.dump_current_target()
+  end)
 end
 
 function M.dump_current_target()
@@ -188,6 +192,10 @@ function M.dump_current_target()
 end
 
 function M.select_target(target_name)
+  if target_name == nil then
+    print("No target selected")
+    return
+  end
   M.add_cmake_target_to_target_list(target_name)
 
   local relative = vim.g.tar_to_relative[target_name]

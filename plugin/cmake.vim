@@ -63,7 +63,7 @@ function s:set_cmake_build_dir(value)
 endfunction
 
 function s:get_cmake_source_dir()
-  return v:lua.require("cmake")get_dco("source_dir")
+  return v:lua.require("cmake").get_dco("source_dir")
 endfunction
 function s:set_cmake_source_dir(value)
   call v:lua.require("cmake").set_dco("source_dir", a:value)
@@ -365,37 +365,6 @@ function s:cmake_clean()
   exe "vs | exe \"normal \<c-w>L\" | terminal " . l:command
 endfunction
 
-function s:_build_all_with_completion(completion)
-  if g:vim_cmake_build_tool ==? 'vsplit'
-    let l:command = 'cmake --build ' . s:get_cmake_build_dir()
-    call s:get_only_window()
-    call termopen(l:command, { "on_exit": a:completion })
-  elseif g:vim_cmake_build_tool ==? 'Makeshift'
-    let &makeprg = s:get_state("build_command")
-    let cwd = getcwd()
-    let b:makeshift_root = cwd . '/' . s:get_cmake_build_dir()
-    " completion not honored
-    MakeshiftBuild
-  elseif g:vim_cmake_build_tool ==? 'vim-dispatch'
-    let cwd = getcwd()
-    let &makeprg = s:get_state("build_command") . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
-    " completion not honored
-    Make
-  elseif g:vim_cmake_build_tool ==? 'make'
-    let cwd = getcwd()
-    let &makeprg = s:get_state("build_command") . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
-    " completion not honored
-    make
-  else
-    echo 'Your g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.'
-  endif
-
-endfunction
-
-function s:cmake_pick_target()
-  call g:cmake#ParseCodeModelJsonWithCompletion(function('s:_do_cmake_pick_target'))
-endf
-
 function s:cmake_pick_executable_target()
   call g:cmake#ParseCodeModelJsonWithCompletion(function('s:_do_cmake_pick_executable_target'))
 endf
@@ -406,10 +375,6 @@ endfunction
 
 function s:_do_cmake_pick_executable_target()
   call v:lua.require("cmake")._do_cmake_pick_executable_target(s:get_execs_from_name_relative_pairs())
-endfunction
-
-function s:_do_cmake_pick_target()
-  call v:lua.require("cmake")._do_cmake_pick_target()
 endfunction
 
 function s:cmake_close_windows()
@@ -816,7 +781,7 @@ command! -nargs=0 CMakeDebugWithNvimLLDB call s:cmake_debug_current_target_lldb(
 command! -nargs=0 CMakeDebugWithNvimGDB call s:cmake_debug_current_target_gdb()
 command! -nargs=0 CMakeDebugWithNvimDapLLDBVSCode call s:cmake_debug_current_target_nvim_dap_lldb_vscode()
 
-command! -nargs=0 CMakePickTarget call s:cmake_pick_target()
+command! -nargs=0 CMakePickTarget call v:lua.require("cmake").cmake_pick_target()
 command! -nargs=0 CMakePickExecutableTarget call s:cmake_pick_executable_target()
 command! -nargs=0 CMakeRunCurrentTarget call s:cmake_run_current_target()
 command! -nargs=* -complete=shellcmd CMakeSetCurrentTargetRunArgs call s:cmake_set_current_target_run_args(<q-args>)
