@@ -125,7 +125,7 @@ end
 
 function M.cmake_set_current_target_run_args(run_args)
   if M.get_current_target_name() == nil then
-    M.select_target_and_run_action(M.update_target)
+    M.select_target(M.update_target)
     return
   end
   M.get_ctco().args = run_args
@@ -181,12 +181,12 @@ function M.cmake_build_current_target(tool)
     end
 
     if #names == 1 then
-      M.select_target(names[1])
+      M.set_current_target(names[1])
       M.build_target(M.get_current_target_name())
     else
       vim.o.makeprg = M.state.build_command
       vim.ui.select(names, { prompt = 'Select Target:' }, function(target_name)
-        M.select_target(target_name)
+        M.set_current_target(target_name)
         M.build_target(M.get_current_target_name())
       end)
     end
@@ -256,10 +256,6 @@ function M.perform_build(target, completion)
   else
     print("g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.")
   end
-end
-
-function M.configure_and_generate()
-  M.configure_and_generate_with_completion(function() end)
 end
 
 function M.get_cmake_argument_string()
@@ -357,9 +353,9 @@ function M.should_break_at_main()
 end
 
 function M.cmake_debug_current_target_lldb()
-  M.parse_codemodel_json_with_completion(function()
+  M.ensure_selected_target(function()
     if M.get_current_target_name() == nil then
-      M.select_target_and_run_action(M._update_target)
+      M.select_target(M._update_target)
     end
 
     M.perform_build(M.get_current_target_name(), M.start_lldb)
@@ -367,9 +363,9 @@ function M.cmake_debug_current_target_lldb()
 end
 
 function M.cmake_debug_current_target_gdb()
-  M.parse_codemodel_json_with_completion(function()
+  M.ensure_selected_target(function()
     if M.get_current_target_name() == nil then
-      M.select_target_and_run_action(M._update_target)
+      M.select_target(M._update_target)
     end
 
     M.perform_build(M.get_current_target_name(), M.start_gdb)
@@ -377,9 +373,9 @@ function M.cmake_debug_current_target_gdb()
 end
 
 function M.cmake_debug_current_target_nvim_dap_lldb_vscode()
-  M.parse_codemodel_json_with_completion(function()
+  M.ensure_selected_target(function()
     if M.get_current_target_name() == nil then
-      M.select_target_and_run_action(M._update_target)
+      M.select_target(M._update_target)
     end
 
     M.perform_build(M.start_nvim_dap_lldb_vscode)
@@ -454,6 +450,8 @@ function M.parse_codemodel_json()
   local build_dir = M.get_build_dir()
   local cmake_query_response_dir = build_dir .. "/.cmake/api/v1/reply/"
   local codemodel_file = vim.fn.globpath(cmake_query_response_dir, "codemodel*")
+
+  assert(codemodel_file ~= nil, "Query reply should be set when calling parse_codemodel_json")
 
   local targets = read_json_file(codemodel_file).configurations[1].targets
 
@@ -560,24 +558,8 @@ function M.get_source_dir()
   return M.get_dco().source_dir
 end
 
-function M.configure_and_generate_with_completion(completion)
-  if vim.fn.filereadable(M.get_source_dir() .. "/CMakeLists.txt") == 0 then
-    print("missing cmakelists.txt NYI")
-    if vim.g.cmake_template_file ~= nil then
-      vim.cmd("!cp " .. vim.g.cmake_template_file .. " " .. M.get_source_dir() .. "/CMakeLists.txt")
-    else
-      print("Could not find a CMakeLists at directory " .. M.get_cmake_source_dir())
-    end
-  end
-
-  local command = M.state.cmake_tool .. " " .. M.get_cmake_argument_string()
-  print(command)
-  ui.get_only_window()
-  vim.fn.termopen(vim.fn.split(command), { on_exit = completion })
-end
-
 function M._update_target_and_run(target)
-  M.select_target(target)
+  M.set_current_target(target)
   M._do_run_current_target()
 end
 
@@ -592,7 +574,7 @@ function M._do_run_current_target()
     vim.g.vim_cmake_build_tool = "vsplit"
   end
 
-  M.parse_codemodel_json_with_completion(function()
+  M.ensure_selected_target(function()
     M.perform_build(M.get_current_target_name(), function(_, exit_code, _)
       ui.close_last_buffer_if_open()
       if exit_code == 0 then
@@ -607,28 +589,59 @@ function M._do_run_current_target()
 end
 
 function M.cmake_run_current_target()
-  M.parse_codemodel_json_with_completion(M._do_run_current_target)
+  M.ensure_selected_target(M._do_run_current_target)
 end
 
 function M.cmake_pick_executable_target()
-  M.parse_codemodel_json_with_completion(M._do_cmake_pick_executable_target)
+  M.ensure_generated(function()
+    M.select_target(M.set_current_target)
+    M.dump_current_target()
+  end)
 end
 
-function M.parse_codemodel_json_with_completion(completion)
-  local build_dir = M.get_build_dir()
-  if vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/reply") == 0 then
-    M.configure_and_generate_with_completion(function()
+function M.configure_and_generate(completion)
+  if vim.fn.filereadable(M.get_source_dir() .. "/CMakeLists.txt") == 0 then
+    print("missing cmakelists.txt NYI")
+    if vim.g.cmake_template_file ~= nil then
+      vim.cmd("!cp " .. vim.g.cmake_template_file .. " " .. M.get_source_dir() .. "/CMakeLists.txt")
+    else
+      print("Could not find a CMakeLists at directory " .. M.get_cmake_source_dir())
+    end
+  end
+
+  local command = M.state.cmake_tool .. " " .. M.get_cmake_argument_string()
+  print(command)
+  ui.get_only_window()
+  vim.fn.termopen(vim.fn.split(command), {
+    on_exit = function()
       M.parse_codemodel_json()
-      completion()
-    end)
+      if completion then
+        completion()
+      end
+    end
+  })
+end
+
+function M.ensure_generated(completion)
+  if M.has_query_reply() then
+    _ = completion and completion()
   else
-    M.parse_codemodel_json()
+    M.configure_and_generate(completion)
+  end
+end
+
+function M.ensure_selected_target(completion)
+  if M.has_set_target() then
     completion()
+  else
+    M.ensure_generated(function()
+      M.select_target(completion)
+    end)
   end
 end
 
 function M.cmake_build_all()
-  M.parse_codemodel_json_with_completion(function(action)
+  M.ensure_generated(function(action)
     if vim.g.vim_cmake_build_tool == "vsplit" then
       local command = "cmake --build " .. M.get_build_dir()
       ui.get_only_window()
@@ -672,15 +685,12 @@ function M.get_executable_targets()
   return names
 end
 
-
 function M._do_cmake_pick_executable_target(pairs)
-  M.select_target_and_run_action(M.select_target)
-  M.dump_current_target()
 end
 
 function M.cmake_pick_target()
-  M.parse_codemodel_json_with_completion(function()
-    M.select_target_and_run_action(M.select_target)
+  M.ensure_selected_target(function()
+    M.select_target(M.set_current_target)
     M.dump_current_target()
   end)
 end
@@ -689,7 +699,7 @@ function M.dump_current_target()
   print("Current target set to " .. M.get_ctco().current_target_file .. " with args " .. M.get_ctco().args)
 end
 
-function M.select_target(target_name)
+function M.set_current_target(target_name)
   assert(target_name ~= nil, "Invalid target to select_target")
   assert(target_name ~= "", "Invalid target to select_target")
 
@@ -699,7 +709,7 @@ function M.select_target(target_name)
   M.write_cache_file()
 end
 
-function M.select_target_and_run_action(action)
+function M.select_target(action)
   local names = M.get_buildable_targets()
 
   if #names == 1 then
