@@ -143,16 +143,6 @@ function s:compose_completions(outer, inner)
   call a:outer(a:inner)
 endfunction
 
-function g:cmake#ParseCodeModelJsonWithCompletion(completion)
-  let l:build_dir = s:get_cmake_build_dir()
-  if !isdirectory(l:build_dir . '/.cmake/api/v1/reply')
-    call s:assure_query_reply_with_completion(function('s:do_all_completions', [function('g:cmake#ParseCodeModelJson'), a:completion]))
-  else
-    call g:cmake#ParseCodeModelJson()
-    call a:completion()
-  endif
-endfunction
-
 call v:lua.require("cmake").initialize_cache_file()
 
 function s:make_query_files()
@@ -168,7 +158,7 @@ endfunction
 function s:assure_query_reply_with_completion(completion)
   let l:build_dir = s:get_cmake_build_dir()
   if !isdirectory(l:build_dir . '/.cmake/api/v1/reply')
-    call s:cmake_configure_and_generate_with_completion(a:completion)
+    call g:cmake#ConfigureAndGenerateWithCompletion(a:completion)
   else
     call a:completion()
   endif
@@ -244,10 +234,10 @@ function s:get_only_window()
 endfunction
 
 function s:cmake_configure_and_generate()
-  call s:cmake_configure_and_generate_with_completion(s:noop)
+  call g:cmake#ConfigureAndGenerateWithCompletion(s:noop)
 endfunction
 
-function s:cmake_configure_and_generate_with_completion(completion)
+function g:cmake#ConfigureAndGenerateWithCompletion(completion)
   if !filereadable(s:get_cmake_source_dir() . "/CMakeLists.txt")
     if exists("g:cmake_template_file")
       silent exec "! cp " . g:cmake_template_file . " " . s:get_cmake_source_dir() . "/CMakeLists.txt"
@@ -304,7 +294,7 @@ function s:_do_build_current_target_with_completion(completion)
 endfunction
 
 function s:cmake_build_current_target_with_completion(completion)
-  call g:cmake#ParseCodeModelJsonWithCompletion(function('s:compose_completions', [function('s:_do_build_current_target_with_completion'), a:completion]))
+  call v:lua.require("cmake").parse_codemodel_json_with_completion(function("s:compose_completions", [function('s:_do_build_current_target_with_completion'), a:completion]))
 endfunction
 
 func s:is_absolute_path(path)
@@ -366,7 +356,7 @@ function s:cmake_clean()
 endfunction
 
 function s:cmake_pick_executable_target()
-  call g:cmake#ParseCodeModelJsonWithCompletion(function('s:_do_cmake_pick_executable_target'))
+  call v:lua.require("cmake").parse_codemodel_json_with_completion(function('s:_do_cmake_pick_executable_target'))
 endf
 
 function s:get_execs_from_name_relative_pairs()
@@ -427,7 +417,7 @@ endfunction
 
 function s:cmake_run_current_target()
   " echom "s:cmake_run_current_target()"
-  call g:cmake#ParseCodeModelJsonWithCompletion(function("s:_do_run_current_target"))
+  call v:lua.require("cmake").parse_codemodel_json_with_completion(function("s:_do_run_current_target"))
 endfunction
 
 function s:dump_current_target()
@@ -660,7 +650,7 @@ function s:cmake_debug_current_target_gdb()
 endf
 
 function s:cmake_debug_current_target()
-  call g:cmake#ParseCodeModelJsonWithCompletion(function("s:_do_debug_current_target"))
+  call v:lua.require("cmake").parse_codemodel_json_with_completion(function("s:_do_debug_current_target"))
 endfunction
 
 function s:_do_debug_current_target()
@@ -785,7 +775,7 @@ command! -nargs=0 CMakePickTarget call v:lua.require("cmake").cmake_pick_target(
 command! -nargs=0 CMakePickExecutableTarget call s:cmake_pick_executable_target()
 command! -nargs=0 CMakeRunCurrentTarget call s:cmake_run_current_target()
 command! -nargs=* -complete=shellcmd CMakeSetCurrentTargetRunArgs call s:cmake_set_current_target_run_args(<q-args>)
-command! -nargs=? -complete=customlist,s:get_build_tools CMakeBuildCurrentTarget call s:cmake_build_current_target(<f-args>)
+command! -nargs=? -complete=customlist,s:get_build_tools CMakeBuildCurrentTarget call v:lua.require("cmake").cmake_build_current_target(<f-args>)
 
 command! -nargs=1 -complete=shellcmd CMakeClean call s:cmake_clean()
 command! -nargs=0 CMakeBuildAll call v:lua.require("cmake").cmake_build_all()

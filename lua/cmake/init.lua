@@ -90,6 +90,14 @@ function M.add_cmake_target_to_target_list(target_name)
   })
 end
 
+function M.get_cmake_target_file()
+  return M.state.dir_cache_object.current_target_file
+end
+
+function M.get_cmake_target_name()
+  return M.state.current_target_cache_object.current_target_name
+end
+
 function M.get_cmake_build_dir()
   return M.state.dir_cache_object.build_dir
 end
@@ -128,12 +136,75 @@ function M.get_only_window()
   vim.g.cmake_last_buffer = vim.api.nvim_get_current_buf()
 end
 
-function M._do_build_all_with_completion(action)
-  -- local directory = M.get_cmake_build_dir()
-  -- if not is_absolute_path(directory) then
-  --   directory = vim.fn.getcwd() .. "/" .. directory
-  -- end
+function M._do_build_current_target()
+  M._do_build_current_target_with_completion(function() end)
+end
 
+function M._update_target_and_build(target_name)
+  M.select_target(target_name)
+  M._do_build_current_target()
+end
+
+function M._do_build_current_target_with_completion(completion)
+  if M.get_cmake_target_file() == nil then
+    M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M._update_target_and_build)
+    return
+  end
+
+  M._build_target_with_completion(M.get_cmake_target_name(), completion)
+end
+
+function M.cmake_build_current_target_with_completion(completion)
+  M.parse_codemodel_json_with_completion(function()
+    M._do_build_current_target_with_completion(completion)
+  end)
+end
+
+function M.cmake_build_current_target(arg)
+  local previous_build_tool = vim.g.vim_cmake_build_tool
+  if arg ~= nil then
+    vim.g.vim_cmake_build_tool = arg
+  end
+
+  M.cmake_build_current_target_with_completion(function() end)
+  vim.g.vim_cmake_build_tool = previous_build_tool
+end
+
+function M._build_target_with_completion(target, completion)
+  local directory = M.get_cmake_build_dir()
+  if not is_absolute_path(directory) then
+    directory = vim.fn.getcwd() .. "/" .. directory
+  end
+
+  if vim.g.vim_cmake_build_tool == "vsplit" then
+    local command = "cmake --build " .. M.get_cmake_build_dir() .. " --target " .. target
+    M.get_only_window()
+    vim.fn.termopen(command, { on_exit = completion })
+  elseif vim.g.vim_cmake_build_tool == "vim-dispatch" then
+    vim.o.makeprg = M.state.build_command .. " -C " .. directory .. " " .. target
+    --   " completion not honored
+    vim.cmd.Make()
+    -- elseif g:vim_cmake_build_tool ==? 'Makeshift'
+    --   let &makeprg = s:get_state("build_command") . ' ' . a:target
+    --   let b:makeshift_root = l:directory
+    --   " completion not honored
+    --   MakeshiftBuild
+    -- elseif g:vim_cmake_build_tool ==? 'make'
+    --   let &makeprg = s:get_state("build_command") . ' -C ' . l:directory . ' ' . a:target
+    --   " completion not honored
+    --   make
+    -- elseif g:vim_cmake_build_tool ==? 'job'
+    --   let l:cmd = s:get_state("build_command") . ' -C ' . l:directory . ' ' . a:target
+    --   call jobstart(cmd, {"on_exit": a:completion })
+    -- else
+    --   echo 'Your g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.'
+    -- endif
+  else
+    print(vim.g.vim_cmake_build_tool .. " NYI")
+  end
+end
+
+function M._do_build_all_with_completion(action)
   if vim.g.vim_cmake_build_tool == "vsplit" then
     local command = "cmake --build " .. M.get_cmake_build_dir()
     M.get_only_window()
@@ -162,7 +233,18 @@ function M._do_build_all_with_completion(action)
   end
 end
 
-M.parse_codemodel_json_with_completion = vim.fn["g:cmake#ParseCodeModelJsonWithCompletion"]
+M.parse_codemodel_json = vim.fn["g:cmake#ParseCodeModelJson"]
+M.cmake_configure_and_generate_with_completion = vim.fn["g:cmake#CMakeConfigureAndGenerateWithCompletion"]
+
+function M.parse_codemodel_json_with_completion(completion)
+  local build_dir = M.get_cmake_build_dir()
+  if not vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/reply") then
+    M.cmake_configure_and_generate_with_completion(completion)
+  else
+    M.parse_codemodel_json()
+    completion()
+  end
+end
 
 function M.cmake_build_all_with_completion(action)
   M.parse_codemodel_json_with_completion(function()
