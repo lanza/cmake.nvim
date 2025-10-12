@@ -653,6 +653,10 @@ function M.cmake_build_all()
   M.cmake_build_all_with_completion(function() end)
 end
 
+function M.get_name_relative_pairs()
+  return M.get_dco("name_relative_pairs")
+end
+
 function M.get_execs_from_name_relative_pairs()
   -- let l:filtered = filter(s:get_name_relative_pairs(), "v:val.is_exec")
   print("NYI")
