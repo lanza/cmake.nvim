@@ -306,6 +306,84 @@ function M.get_cmake_argument_string()
   return table.concat(arguments, " ")
 end
 
+function M.toggle_file_line_breakpoint()
+  local curpos = vim.fn.getcurpos()
+  local line_number = curpos[2]
+
+  local file_name = vim.fn.expand("#" .. vim.fn.bufnr() .. ":p")
+
+  local break_string = file_name .. ":" .. line_number
+
+  M.toggle_breakpoint(break_string)
+end
+
+function M.toggle_file_line_column_breakpoint()
+  local curpos = vim.fn.getcurpos()
+  local line_number = curpos[2]
+  local column_number = curpos[3]
+
+  local file_name = vim.fn.expand("#" .. vim.fn.bufnr() .. ":p")
+
+  local break_string = file_name .. ":" .. line_number .. ":" .. column_number
+
+  M.toggle_breakpoint(break_string)
+end
+
+function M.toggle_breakpoint(break_string)
+  local breakpoints = M.get_ctco("breakpoints")
+  if vim.fn.has_key(breakpoints, break_string) == 1 then
+    breakpoints[break_string].enabled = not breakpoints[break_string].enabled
+  else
+    breakpoints[break_string] = {
+      text = break_string,
+      enabled = true,
+    }
+  end
+  M.write_cache_file()
+end
+
+function M.should_break_at_main()
+  local path = vim.env.HOME .. "/.config/vim_cmake/dont_break_at_main"
+  return vim.fn.filereadable(path) == 0
+end
+
+function M.toggle_break_at_main()
+  local path = vim.env.HOME .. "/.config/vim_cmake/dont_break_at_main"
+  if vim.fn.filereadable(path) == 1 then
+    vim.fn.delete(path)
+    return
+  end
+
+  local config = vim.env.HOME .. "/.config"
+  if vim.fn.isdirectory(config) == 0 then
+    vim.fn.mkdir(config)
+  end
+  local vim_cmake = config .. "/vim_cmake"
+  if vim.fn.isdirectory(vim_cmake) == 0 then
+    vim.fn.mkdir(vim_cmake)
+  end
+  vim.fn.writefile({ " " }, path)
+end
+
+function M.list_breakpoints()
+  local breakpoint_list = {}
+  local breakpoints = M.get_ctco("breakpoints")
+  print("Enabled:")
+  for _, breakpoint in pairs(breakpoints) do
+    if breakpoint.enabled then
+      print("    " .. breakpoint.text)
+    end
+  end
+  print("Disabled:")
+  for _, breakpoint in pairs(breakpoints) do
+    if not breakpoint.enabled then
+      print("    " .. breakpoint.text)
+    end
+  end
+
+  print(table.concat(breakpoint_list, "\n"))
+end
+
 function M.get_debugger()
   return M.state.debugger
 end
@@ -535,6 +613,9 @@ function M.edit_run_args()
     prompt = "Run Arguments: ",
     default = M.get_cmake_target_args(),
   }, function(input)
+    if input == nil then
+      return
+    end
     M.cmake_set_current_target_run_args(input)
   end)
 end
@@ -544,6 +625,9 @@ function M.edit_build_dir()
     prompt = "Build Directory: ",
     default = M.get_cmake_build_dir(),
   }, function(input)
+    if input == nil then
+      return
+    end
     M.cmake_update_build_dir(input)
   end)
 end
@@ -553,6 +637,9 @@ function M.edit_source_dir()
     prompt = "Source Directory: ",
     default = M.get_dco("source_dir"),
   }, function(input)
+    if input == nil then
+      return
+    end
     M.cmake_update_source_dir(input)
   end)
 end
@@ -562,6 +649,9 @@ function M.edit_cmake_args()
     prompt = "CMake Arguments: ",
     default = table.concat(M.get_cmake_args(), " "),
   }, function(input)
+    if input == nil then
+      return
+    end
     M.cmake_set_cmake_args(vim.fn.split(input, " "))
   end)
 end

@@ -101,7 +101,7 @@ function s:start_lldb(job_id, exit_code, event)
   endif
   let l:commands = []
 
-  if s:should_break_at_main()
+  if v:lua.require("cmake").should_break_at_main()
     call add(l:commands, "breakpoint set --func-regex '^main$'")
   endif
 
@@ -132,74 +132,6 @@ function s:start_lldb(job_id, exit_code, event)
     let l:lldb_init_arg = ''
   endif
   exec 'GdbStartLLDB lldb ' . v:lua.require("cmake").get_cmake_target_file() . l:lldb_init_arg . ' -- ' . v:lua.require("cmake").get_cmake_target_args()
-endfunction
-
-function s:toggle_file_line_column_breakpoint()
-  let l:curpos = getcurpos()
-  let l:line_number = l:curpos[1]
-  let l:column_number = l:curpos[2]
-
-  let l:filename = expand("#" . bufnr() . ":p")
-
-  let l:break_string = l:filename . ":" . l:line_number . ":" . l:column_number
-
-  call s:toggle_breakpoint(l:break_string)
-endfunction
-
-function s:toggle_break_at_main()
-  if filereadable($HOME . ".config/vim_cmake/dont_break_at_main")
-    silent !rm ~/.config/vim_cmake/dont_break_at_main
-  else
-    if !isdirectory($HOME . "/.config")
-      silent !mkdir ~/.config
-    end
-    if !isdirectory($HOME . "/.config/vim_cmake")
-      silent !mkdir ~/.config/vim_cmake
-    end
-    silent !touch ~/.config/vim_cmake/dont_break_at_main
-  endif
-endfunction
-
-function s:should_break_at_main()
-  return !filereadable($HOME . "/.config/vim_cmake/dont_break_at_main")
-endfunction
-
-function s:toggle_file_line_breakpoint()
-  let l:curpos = getcurpos()
-  let l:line_number = l:curpos[1]
-
-  let l:filename = expand("#" . bufnr() . ":p")
-
-  let l:break_string = l:filename . ":" . l:line_number
-
-  call s:toggle_breakpoint(l:break_string)
-endfunction
-
-function g:CMake_list_breakpoints()
-  let args = []
-  let l:bps = v:lua.require("cmake").get_cmake_cache_file()[getcwd()]["targets"][v:lua.require("cmake").get_cmake_target_file()]["breakpoints"]
-  for bp in keys(l:bps)
-    let l:b = l:bps[bp]
-    if l:b["enabled"]
-      call add(args, bp)
-    endif
-  endfor
-
-  echo join(args, "\n")
-endfunction
-
-function s:toggle_breakpoint(break_string)
-  let l:data = v:lua.require("cmake").get_cmake_cache_file()
-  let l:breakpoints = l:data[getcwd()]['targets'][v:lua.require("cmake").get_cmake_target_file()]["breakpoints"]
-  if has_key(l:breakpoints, a:break_string)
-    let l:breakpoints[a:break_string]["enabled"] = !l:breakpoints[a:break_string]["enabled"]
-  else
-    let l:breakpoints[a:break_string] = {
-        \ "text": a:break_string,
-        \ "enabled": v:true
-        \ }
-  endif
-  call v:lua.require("cmake").write_cache_file()
 endfunction
 
 " TODO: Fix this breakpoint handling
@@ -295,10 +227,11 @@ command! -nargs=0 CMakeLoad call v:lua.require("cmake").cmake_load()
 
 command! -nargs=0 CMakeConfigureAndGenerate call v:lua.require("cmake").configure_and_generate()
 
-command! -nargs=0 CMakeToggleFileLineColumnBreakpoint call s:toggle_file_line_column_breakpoint()
-command! -nargs=0 CMakeToggleFileLineBreakpoint call s:toggle_file_line_breakpoint()
-command! -nargs=0 CMakeListBreakpoints call g:CMake_list_breakpoints()
-command! -nargs=0 CMakeToggleBreakAtMain call s:toggle_break_at_main()
+command! -nargs=0 CMakeToggleFileLineColumnBreakpoint call v:lua.require("cmake").toggle_file_line_column_breakpoint()
+command! -nargs=0 CMakeToggleFileLineBreakpoint call v:lua.require("cmake").toggle_file_line_breakpoint()
+
+command! -nargs=0 CMakeListBreakpoints call v:lua.require("cmake").list_breakpoints()
+command! -nargs=0 CMakeToggleBreakAtMain call v:lua.require("cmake").toggle_break_at_main()
 command! -nargs=0 CMakeDebugWithNvimLLDB call s:cmake_debug_current_target_lldb()
 command! -nargs=0 CMakeDebugWithNvimGDB call s:cmake_debug_current_target_gdb()
 command! -nargs=0 CMakeDebugWithNvimDapLLDBVSCode call s:cmake_debug_current_target_nvim_dap_lldb_vscode()
