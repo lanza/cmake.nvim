@@ -792,7 +792,7 @@ function M.cmake_load()
   -- do nothing ... just enables my new build dir grep command to work
 end
 
-function M.get_build_tools()
+local function get_build_tools()
   return { "vsplit", "vim-dispatch", "Makeshift", "make", "job" }
 end
 
@@ -869,7 +869,7 @@ vim.api.nvim_create_user_command("CMakeRunCurrentTarget", M.cmake_run_current_ta
 vim.api.nvim_create_user_command("CMakeSetCurrentTargetRunArgs",
   function(args) M.cmake_set_current_target_run_args(args.args) end, { nargs = "*", })
 vim.api.nvim_create_user_command("CMakeBuildCurrentTarget", function(args) M.cmake_build_current_target(args.args) end,
-  { nargs = "?" }) -- { nargs = "?", complete = M.get_build_tools })
+  { nargs = "?", complete = get_build_tools }) -- { nargs = "?", complete = get_build_tools })
 
 vim.api.nvim_create_user_command("CMakeClean", M.cmake_clean, { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeBuildAll", M.cmake_build_all, { nargs = 0, })
