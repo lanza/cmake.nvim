@@ -833,7 +833,7 @@ function M.cmake_update_source_dir(source_dir)
   M.write_cache_file()
 end
 
-function M.run_lit_on_file()
+function M.cmake_run_lit_on_file()
   local full_path = vim.fn.expand("%:p")
   local lit_path = "llvm-lit"
   local bin_lit_path = M.get_build_dir() .. "/bin/llvm-lit"
@@ -875,8 +875,8 @@ vim.api.nvim_create_user_command("CMakeClean", M.cmake_clean, { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeBuildAll", M.cmake_build_all, { nargs = 0, })
 
 vim.api.nvim_create_user_command("CMakeCreateFile", M.cmake_create_file, { nargs = 1 })
-vim.api.nvim_create_user_command("CMakeRunLitOnFile", M.run_lit_on_file, { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeCloseWindow", ui.cmake_close_windows, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeRunLitOnFile", M.cmake_run_lit_on_file, { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeLoad", M.cmake_load, { nargs = 0, })
 
 vim.api.nvim_create_user_command("CMakeConfigureAndGenerate", M.configure_and_generate, { nargs = 0, })
