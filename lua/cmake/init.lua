@@ -91,27 +91,16 @@ function M.initialize_cache_file()
   M.bind_ctco()
 end
 
-function M.add_cmake_target_to_target_list(target_name)
-  -- inspect(target_name)
-  -- inspect(M.state.tar_to_relative)
-  local relative = M.state.tar_to_relative[target_name]
-  local file = M.state.dir_cache_object.build_dir .. "/" .. relative
-
-  M.add_dco_target_if_new(file, {
-    current_target_file = file,
-    current_target_relative = relative,
-    current_target_name = target_name,
-    args = "",
-    breakpoints = {},
-  })
-end
-
 function M.get_cmake_target_args()
   return M.get_ctco("args")
 end
 
 function M.get_cmake_cache_file()
   return M.state.global_cache_object
+end
+
+function M.has_set_target()
+  return M.state.current_target_cache_object ~= nil
 end
 
 function M.get_cmake_target_file()
@@ -194,6 +183,15 @@ function M.cmake_build_current_target_with_completion(completion)
   end)
 end
 
+function M.get_buildable_targets()
+  local names = {}
+  for _, target in ipairs(M.get_name_relative_pairs()) do
+    local name = target.name
+    table.insert(names, name)
+  end
+  return names
+end
+
 function M.cmake_build_current_target(tool)
   local previous_build_tool = vim.g.vim_cmake_build_tool
   if tool ~= nil and tool ~= "" then
@@ -204,19 +202,13 @@ function M.cmake_build_current_target(tool)
   local source_dir = M.get_source_dir()
 
   local handler1 = function()
-    if M.get_cmake_target_file() ~= nil then
+    if M.has_set_target() then
       M._build_target_with_completion(M.get_cmake_target_name(), function() end)
       return
     end
 
-    local names = {}
-    for _, target in ipairs(M.get_name_relative_pairs()) do
-      local name = target.name
-      table.insert(names, name)
-    end
-
     local handler = function(target_name)
-      if M.get_cmake_target_file() ~= nil then
+      if M.has_set_target() then
         M._build_target_with_completion(M.get_cmake_target_name(), function() end)
       end
 
@@ -231,9 +223,9 @@ function M.cmake_build_current_target(tool)
 
         M._build_target_with_completion(M.get_cmake_target_name(), function() end)
       end)
-      return
     end
 
+    local names = M.get_buildable_targets()
 
     if #names == 1 then
       handler(names[1])
@@ -241,8 +233,6 @@ function M.cmake_build_current_target(tool)
       vim.o.makeprg = M.state.build_command
       vim.ui.select(names, { prompt = 'Select Target:' }, handler)
     end
-
-    return
   end
 
   if vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/reply") == 1 then
@@ -275,9 +265,9 @@ function M.cmake_build_current_target(tool)
 end
 
 function M._build_target_with_completion(target, completion)
-  local directory = M.get_build_dir()
-  if not is_absolute_path(directory) then
-    directory = vim.fn.getcwd() .. "/" .. directory
+  local build_dir = M.get_build_dir()
+  if not is_absolute_path(build_dir) then
+    build_dir = vim.fn.getcwd() .. "/" .. build_dir
   end
 
   if vim.g.vim_cmake_build_tool == "vsplit" then
@@ -285,7 +275,7 @@ function M._build_target_with_completion(target, completion)
     M.get_only_window()
     vim.fn.termopen(command, { on_exit = completion })
   elseif vim.g.vim_cmake_build_tool == "vim-dispatch" then
-    vim.o.makeprg = M.state.build_command .. " -C " .. directory .. " " .. target
+    vim.o.makeprg = M.state.build_command .. " -C " .. build_dir .. " " .. target
     --   " completion not honored
     vim.cmd.Make()
     -- elseif g:vim_cmake_build_tool ==? 'Makeshift'
@@ -560,6 +550,16 @@ function M.parse_codemodel_json()
       -- print(name .. " -> " .. path)
       M.state.tar_to_relative[name] = path
       -- inspect(M.state.tar_to_relative)
+      local relative = M.state.tar_to_relative[name]
+      local filepath = M.state.dir_cache_object.build_dir .. "/" .. relative
+
+      M.add_dco_target_if_new(filepath, {
+        current_target_file = filepath,
+        current_target_relative = relative,
+        current_target_name = name,
+        args = "",
+        breakpoints = {},
+      })
     else
       M.add_name_relative_pair(name, false, false)
     end
@@ -768,16 +768,12 @@ function M.dump_current_target()
 end
 
 function M.select_target(target_name)
-  if target_name == nil then
-    print("No target selected")
-    return
-  end
-  M.add_cmake_target_to_target_list(target_name)
+  assert(target_name ~= nil, "Invalid target to select_target")
+  assert(target_name ~= "", "Invalid target to select_target")
 
-  local relative = M.state.tar_to_relative[target_name]
-  local file = M.state.dir_cache_object.build_dir .. "/" .. relative
+  local target = M.get_dco("targets")[target_name]
+  M.set_dco("current_target_file", target.filepath)
 
-  M.set_dco("current_target_file", file)
   M.bind_ctco()
   M.write_cache_file()
 end
