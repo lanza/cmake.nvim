@@ -138,10 +138,6 @@ function M.get_only_window()
   vim.g.cmake_last_buffer = vim.api.nvim_get_current_buf()
 end
 
-function M._do_build_current_target()
-  M._do_build_current_target_with_completion(function() end)
-end
-
 function M.cmake_set_current_target_run_args(run_args)
   if M.get_current_target_name() == nil then
     M.cmake_get_target_and_run_action(M.update_target)
@@ -154,21 +150,12 @@ end
 
 function M._update_target_and_build(target_name)
   M.select_target(target_name)
-  M._do_build_current_target()
-end
-
-function M._do_build_current_target_with_completion(completion)
-  if M.get_current_target_name() == nil then
-    M.cmake_get_target_and_run_action(M._update_target_and_build)
-    return
-  end
-
-  M._build_target_with_completion(M.get_current_target_name(), completion)
+  M._build_target_with_completion(target_name)
 end
 
 function M.cmake_build_current_target_with_completion(completion)
   M.parse_codemodel_json_with_completion(function()
-    M._do_build_current_target_with_completion(completion)
+    M._build_target_with_completion(M.get_current_target_name(), completion)
   end)
 end
 
@@ -259,10 +246,13 @@ function M.cmake_build_current_target(tool)
 end
 
 function M.build_target(target)
+  assert(M.has_query_reply(), "Shouldn't call build_target without a query reply")
+  assert(M.has_set_target(), "Shouldn't call build_target without a set target")
   M._build_target_with_completion(target, function() end)
 end
 
 function M._build_target_with_completion(target, completion)
+  assert(M.has_set_target(), "Shouldn't call _build_target_with_completion without a set target")
   local build_dir = M.get_build_dir()
   if not is_absolute_path(build_dir) then
     build_dir = vim.fn.getcwd() .. "/" .. build_dir
@@ -276,24 +266,21 @@ function M._build_target_with_completion(target, completion)
     vim.o.makeprg = M.state.build_command .. " -C " .. build_dir .. " " .. target
     --   " completion not honored
     vim.cmd.Make()
-    -- elseif g:vim_cmake_build_tool ==? 'Makeshift'
+  elseif vim.g.vim_cmake_build_tool == "Makeshift" then
+    print("Makeshift NYI")
     --   let &makeprg = s:get_state("build_command") . ' ' . a:target
     --   let b:makeshift_root = l:directory
     --   " completion not honored
     --   MakeshiftBuild
-    -- elseif g:vim_cmake_build_tool ==? 'make'
+  elseif vim.g.vim_cmake_build_tool == "make" then
     --   let &makeprg = s:get_state("build_command") . ' -C ' . l:directory . ' ' . a:target
     --   " completion not honored
     --   make
-    -- elseif g:vim_cmake_build_tool ==? 'job'
+  elseif vim.g.vim_cmake_build_tool == "job" then
     --   let l:cmd = s:get_state("build_command") . ' -C ' . l:directory . ' ' . a:target
     --   call jobstart(cmd, {"on_exit": a:completion })
-    -- else
-    --   echo 'Your g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.'
-    -- endif
   else
-    print(vim.g.vim_cmake_build_tool)
-    print("Tool: " .. vim.g.vim_cmake_build_tool .. " NYI")
+    print("g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.")
   end
 end
 
