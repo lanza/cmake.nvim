@@ -96,6 +96,10 @@ function M.has_set_target()
   return M.state.current_target_cache_object ~= nil
 end
 
+function M.get_current_target_file()
+  return M.get_ctco().current_target_file
+end
+
 function M.get_current_target_name()
   return M.state.dir_cache_object.current_target
 end
@@ -401,7 +405,7 @@ function M.cmake_debug_current_target_nvim_dap_lldb_vscode()
   M.cmake_debug_current_target()
 end
 
-function M.start_lldb(job_id, exit_code, event)
+function M.start_lldb(_, exit_code, _)
   if exit_code ~= 0 then
     return
   end
@@ -430,7 +434,7 @@ function M.start_lldb(job_id, exit_code, event)
   local lldb_init_arg = " -s " .. init_file
 
   vim.cmd("GdbStartLLDB lldb " ..
-    M.get_current_target_name() .. lldb_init_arg .. " " .. " -- " .. M.get_run_args())
+    M.get_current_target_file() .. lldb_init_arg .. " " .. " -- " .. M.get_run_args())
 end
 
 function M.start_gdb(job_id, exit_code, event)
@@ -462,7 +466,7 @@ function M.start_gdb(job_id, exit_code, event)
   local gdb_init_arg = " -s " .. init_file
 
   vim.cmd("GdbStartLLDB gdb -q " ..
-    gdb_init_arg .. " --args " .. M.get_current_target_name() .. " " .. M.get_run_args())
+    gdb_init_arg .. " --args " .. M.get_current_target_file() .. " " .. M.get_run_args())
 end
 
 local function read_json_file(file_path)
@@ -533,7 +537,7 @@ function M.start_nvim_dap_lldb_vscode(job_id, exit_code, event)
   M.close_last_buffer_if_open()
 
   local command = "DebugLldb " ..
-      M.get_current_target_name() .. " --lldbinit " .. init_file .. " -- " .. M.get_run_args()
+      M.get_current_target_file() .. " --lldbinit " .. init_file .. " -- " .. M.get_run_args()
   vim.cmd(command)
 end
 
