@@ -30,6 +30,11 @@ function M.get_only_window()
   vim.g.cmake_last_buffer = vim.api.nvim_get_current_buf()
 end
 
+function M.cmake_close_windows()
+  M.close_last_window_if_open()
+  M.close_last_buffer_if_open()
+end
+
 function M.setup(opts)
   vim.g.cmake_last_window = nil
   vim.g.cmake_last_buffer = nil

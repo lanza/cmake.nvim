@@ -672,10 +672,6 @@ function M.get_executable_targets()
   return names
 end
 
-function M.cmake_close_windows()
-  ui.close_last_window_if_open()
-  ui.close_last_buffer_if_open()
-end
 
 function M._do_cmake_pick_executable_target(pairs)
   M.select_target_and_run_action(M.select_target)
@@ -879,8 +875,8 @@ vim.api.nvim_create_user_command("CMakeClean", M.cmake_clean, { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeBuildAll", M.cmake_build_all, { nargs = 0, })
 
 vim.api.nvim_create_user_command("CMakeCreateFile", M.cmake_create_file, { nargs = 1 })
-vim.api.nvim_create_user_command("CMakeCloseWindow", M.cmake_close_windows, { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeRunLitOnFile", M.run_lit_on_file, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeCloseWindow", ui.cmake_close_windows, { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeLoad", M.cmake_load, { nargs = 0, })
 
 vim.api.nvim_create_user_command("CMakeConfigureAndGenerate", M.configure_and_generate, { nargs = 0, })
