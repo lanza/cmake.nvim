@@ -437,6 +437,69 @@ function M.add_name_relative_pair(name, is_exec, is_artifact, relative)
   })
 end
 
+function M.cmake_open_cache_file()
+  vim.cmd.edit(M.get_cmake_build_dir() .. "/CMakeCache.txt")
+end
+
+function M.cmake_set_cmake_args(args)
+  M.set_dco("cmake_arguments", args)
+  M.write_cache_file()
+end
+
+function M.get_cmake_args()
+  return M.get_dco("cmake_arguments")
+end
+
+function M.edit_cmake_args()
+  vim.ui.input({
+    prompt = "CMake Arguments: ",
+    default = M.get_cmake_args(),
+  }, function(input)
+    M.cmake_set_cmake_args(input)
+  end)
+end
+
+function M.cmake_load()
+  -- do nothing ... just enables my new build dir grep command to work
+end
+
+function M.cmake_create_file(args)
+  print("NYI")
+  -- if len(a:000) > 2 || len(a:000) == 0
+  --   echo 'CMakeCreateFile requires 1 or 2 arguments: e.g. Directory File for `Directory/File.{cpp,h}`'
+  --   return
+  -- endif
+
+  -- if len(a:000) == 2
+  --   let l:header = "include/" . a:1 . "/" . a:2 . ".h"
+  --   let l:source = "lib/" . a:1 . "/" . a:2 . ".cpp"
+  --   silent exec "!touch " . l:header
+  --   silent exec "!touch " . l:source
+  -- elseif len(a:000) == 1
+  --   let l:header = "include/" . a:1 . ".h"
+  --   let l:source = "lib/" . a:1 . ".cpp"
+  --   silent exec "!touch " . l:header
+  --   silent exec "!touch " . l:source
+  -- end
+end
+
+function M.cmake_clean()
+  local command = "cmake --build " .. M.get_cmake_build_dir() .. " --target clean"
+  vim.fn.vsplit()
+  vim.fn.wincmd("L")
+  vim.fn.terminal(command)
+end
+
+function M.cmake_update_build_dir(args)
+  M.set_dco("build_dir", args)
+  M.write_cache_file()
+end
+
+function M.cmake_update_source_dir(args)
+  M.set_dco("source_dir", args)
+  M.write_cache_file()
+end
+
 function M.run_lit_on_file()
   local full_path = vim.fn.expand("%:p")
   local lit_path = "llvm-lit"
@@ -448,6 +511,7 @@ function M.run_lit_on_file()
   vim.fn.termopen({ lit_path, M.state.extra_lit_args, full_path })
 end
 
-function M.setup(opts) end
+function M.setup(opts)
+end
 
 return M

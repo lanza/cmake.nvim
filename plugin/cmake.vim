@@ -20,13 +20,6 @@ function s:get_cmake_target_args()
   return v:lua.require("cmake").get_ctco("args")
 endfunction
 
-function s:set_cmake_arguments(value)
-  call v:lua.require("cmake").set_dco("cmake_arguments", a:value)
-endfunction
-function s:get_cmake_arguments()
-  return v:lua.require("cmake").get_dco("cmake_arguments")
-endfunction
-
 function s:get_cmake_build_dir()
   return v:lua.require("cmake").get_dco("build_dir")
 endfunction
@@ -36,9 +29,6 @@ endfunction
 
 function s:get_cmake_source_dir()
   return v:lua.require("cmake").get_dco("source_dir")
-endfunction
-function s:set_cmake_source_dir(value)
-  call v:lua.require("cmake").set_dco("source_dir", a:value)
 endfunction
 
 function s:get_cmake_cache_file()
@@ -203,11 +193,6 @@ let g:cmake_last_buffer = v:null
 if !exists('g:vim_cmake_build_tool')
   let g:vim_cmake_build_tool = 'vsplit'
 endif
-
-function s:cmake_clean()
-  let l:command = 'cmake --build ' . s:get_cmake_build_dir() . ' --target clean'
-  exe "vs | exe \"normal \<c-w>L\" | terminal " . l:command
-endfunction
 
 function s:cmake_get_target_and_run_action(name_relative_pairs, action)
   " echom "s:cmake_get_target_and_run_action([" . join(a:target_list, ",")  . "], " . a:action . ")"
@@ -440,16 +425,6 @@ function s:_do_debug_current_target()
   endif
 endfunction
 
-function s:cmake_set_cmake_args(...)
-  let l:arguments = a:000
-  call s:set_cmake_arguments(l:arguments)
-  call v:lua.require("cmake").write_cache_file()
-endfunction
-
-function g:GetCMakeArgs()
-  return s:get_cmake_arguments()
-endfunction
-
 function g:GetCMakeCurrentTargetRunArgs()
   let c = s:get_cmake_single_target_cache()
   return c.args
@@ -460,37 +435,6 @@ function s:get_cmake_single_target_cache()
   return c[s:get_cmake_target_file()]
 endfunction
 
-function s:cmake_create_file(...)
-  if len(a:000) > 2 || len(a:000) == 0
-    echo 'CMakeCreateFile requires 1 or 2 arguments: e.g. Directory File for `Directory/File.{cpp,h}`'
-    return
-  endif
-
-  if len(a:000) == 2
-    let l:header = "include/" . a:1 . "/" . a:2 . ".h"
-    let l:source = "lib/" . a:1 . "/" . a:2 . ".cpp"
-    silent exec "!touch " . l:header
-    silent exec "!touch " . l:source
-  elseif len(a:000) == 1
-    let l:header = "include/" . a:1 . ".h"
-    let l:source = "lib/" . a:1 . ".cpp"
-    silent exec "!touch " . l:header
-    silent exec "!touch " . l:source
-  end
-endfunction
-
-function s:cmake_update_build_dir(...)
-  let dir = a:1
-  call s:set_cmake_build_dir(dir)
-  call v:lua.require("cmake").write_cache_file()
-endfunction
-
-function s:cmake_update_source_dir(...)
-  let dir = a:1
-  call s:set_cmake_source_dir(dir)
-  call v:lua.require("cmake").write_cache_file()
-endfunction
-
 function g:GetCMakeSourceDir()
   return s:get_cmake_source_dir()
 endfunction
@@ -499,23 +443,15 @@ function g:GetCMakeBuildDir()
   return s:get_cmake_build_dir()
 endfunction
 
-function s:cmake_open_cache_file()
-  exe 'e ' . s:get_cmake_build_dir() . '/CMakeCache.txt'
-endf
-
 function s:get_build_tools(...)
   return ["vim-dispatch", "vsplit", "Makeshift", "make", "job"]
 endfunction
 
-function s:cmake_load()
-  " do nothing ... just enables my new build dir grep command to work
-endfunction
+command! -nargs=0 CMakeOpenCacheFile call v:lua.require("cmake").cmake_open_cache_file()
 
-command! -nargs=0 CMakeOpenCacheFile call s:cmake_open_cache_file()
-
-command! -nargs=* -complete=shellcmd CMakeSetCMakeArgs call s:cmake_set_cmake_args(<f-args>)
-command! -nargs=1 -complete=shellcmd CMakeSetBuildDir call s:cmake_update_build_dir(<f-args>)
-command! -nargs=1 -complete=shellcmd CMakeSetSourceDir call s:cmake_update_source_dir(<f-args>)
+command! -nargs=* -complete=shellcmd CMakeSetCMakeArgs call v:lua.require("cmake").cmake_set_cmake_args(<f-args>)
+command! -nargs=1 -complete=shellcmd CMakeSetBuildDir call v:lua.require("cmake").cmake_update_build_dir(<f-args>)
+command! -nargs=1 -complete=shellcmd CMakeSetSourceDir call v:lua.require("cmake").cmake_update_source_dir(<f-args>)
 
 command! -nargs=0  CMakeConfigureAndGenerate call s:cmake_configure_and_generate()
 
@@ -529,7 +465,7 @@ command! -nargs=0 CMakeRunCurrentTarget call v:lua.require("cmake").cmake_run_cu
 command! -nargs=* -complete=shellcmd CMakeSetCurrentTargetRunArgs call v:lua.require("cmake").cmake_set_current_target_run_args(<q-args>)
 command! -nargs=? -complete=customlist,s:get_build_tools CMakeBuildCurrentTarget call v:lua.require("cmake").cmake_build_current_target(<f-args>)
 
-command! -nargs=1 -complete=shellcmd CMakeClean call s:cmake_clean()
+command! -nargs=1 -complete=shellcmd CMakeClean call v:lua.require("cmake").cmake_clean()
 command! -nargs=0 CMakeBuildAll call v:lua.require("cmake").cmake_build_all()
 
 command! -nargs=0 CMakeToggleFileLineColumnBreakpoint call s:toggle_file_line_column_breakpoint()
@@ -537,16 +473,16 @@ command! -nargs=0 CMakeToggleFileLineBreakpoint call s:toggle_file_line_breakpoi
 command! -nargs=0 CMakeListBreakpoints call g:CMake_list_breakpoints()
 command! -nargs=0 CMakeToggleBreakAtMain call s:toggle_break_at_main()
 
-command! -nargs=* -complete=shellcmd CMakeCreateFile call s:cmake_create_file(<f-args>)
+command! -nargs=* -complete=shellcmd CMakeCreateFile call v:lua.require("cmake").cmake_create_file(<f-args>)
 
 command! -nargs=1 -complete=shellcmd CMakeCloseWindow call v:lua.require("cmake").cmake_close_windows()
 
 command! -nargs=0 CMakeRunLitOnFile call v:lua.require("cmake").run_lit_on_file()
 
-command! -nargs=0 CMakeLoad call s:cmake_load()
+command! -nargs=0 CMakeLoad call v:lua.require("cmake").cmake_load()
 
 command! CMakeEditCurrentTargetRunArgs call feedkeys(":CMakeSetCurrentTargetRunArgs " . eval("g:GetCMakeCurrentTargetRunArgs()"))
-command! CMakeEditCMakeArgs call feedkeys(":CMakeSetCMakeArgs " . eval("join(g:GetCMakeArgs(), ' ')"))
+command! CMakeEditCMakeArgs call v:lua.require("cmake").edit_cmake_args()
 command! CMakeEditBuildDir call feedkeys(":CMakeSetBuildDir " . eval("g:GetCMakeBuildDir()"))
 command! CMakeEditSourceDir call feedkeys(":CMakeSetSourceDir " . eval("g:GetCMakeSourceDir()"))
 
