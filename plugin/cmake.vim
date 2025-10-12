@@ -8,21 +8,6 @@ else
   let g:loaded_vim_cmake = 1
 endif
 
-
-function s:decode_json(string) abort
-  if exists('*json_decode')
-    return json_decode(a:string)
-  endif
-  let [null, false, true] = ['', 0, 1]
-  let stripped = substitute(a:string,'\C"\(\\.\|[^"\\]\)*"','','g')
-  if stripped !~# '[^,:{}\\[\\]0-9.\\-+Eaeflnr-u \n\r\t]'
-    try
-      return eval(substitute(a:string,'[\r\n]',' ','g'))
-    catch
-    endtry
-  endif
-endfunction
-
 function s:set_if_empty(object, key, val)
   if !has_key(a:object, a:key)
     let a:object[a:key] = a:val
@@ -142,7 +127,7 @@ function s:_do_parse_codemodel_json()
     return
   endif
 
-  let l:data = s:decode_json(l:json_string)
+  let l:data = json_decode(l:json_string)
 
   let l:configurations = l:data['configurations']
   let l:first_config = l:configurations[0]
@@ -158,7 +143,7 @@ function s:_do_parse_codemodel_json()
     let l:name = target['name']
     let l:file = readfile(l:cmake_query_response . l:jsonFile)
     let l:json_string = join(l:file, "\n")
-    let l:target_file_data = s:decode_json(l:json_string)
+    let l:target_file_data = json_decode(l:json_string)
     if has_key(l:target_file_data, 'artifacts')
       let l:artifacts = l:target_file_data['artifacts']
       let l:artifact = l:artifacts[0]
@@ -230,9 +215,9 @@ function s:initialize_cache_file()
     let l:contents = readfile(g:state.cache_file_path)
     let l:json_string = join(l:contents, "\n")
 
-    call s:set_cmake_cache_file(s:decode_json(l:json_string))
+    call s:set_cmake_cache_file(json_decode(l:json_string))
   else
-    call s:set_cmake_cache_file(s:decode_json('{}'))
+    call s:set_cmake_cache_file(json_decode('{}'))
   endif
 
   " load directory cache object
