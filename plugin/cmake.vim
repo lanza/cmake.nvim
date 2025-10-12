@@ -170,17 +170,6 @@ function s:check_if_buffer_is_alive(buf)
   endif
 endfunction
 
-" close the current window and open a new one
-" This is a hack for now because I don't feel like figuring out how to clean a
-" dirty buffer and termopen refuses to open in a dirty buffer
-function s:get_only_window()
-  call s:close_last_window_if_open()
-  call s:close_last_buffer_if_open()
-  exe "vs | wincmd L | enew"
-  let g:cmake_last_window = nvim_get_current_win()
-  let g:cmake_last_buffer = nvim_get_current_buf()
-endfunction
-
 function s:cmake_configure_and_generate()
   call g:cmake#ConfigureAndGenerateWithCompletion(s:noop)
 endfunction
@@ -196,7 +185,7 @@ function g:cmake#ConfigureAndGenerateWithCompletion(completion)
   endif
   let l:command = s:get_state("cmake_tool") . " " . s:get_cmake_argument_string()
   echo l:command
-  call s:get_only_window()
+  call v:lua.require("cmake").get_only_window()
   call termopen(split(l:command), {'on_exit': a:completion})
   " let l:link_cc_path = getcwd() . '/' . s:get_source_dir() . '/compile_commands.json'
   " let l:build_cc_path = getcwd() . '/' . s:get_build_dir() . '/compile_commands.json'
@@ -218,30 +207,6 @@ endif
 function s:cmake_clean()
   let l:command = 'cmake --build ' . s:get_cmake_build_dir() . ' --target clean'
   exe "vs | exe \"normal \<c-w>L\" | terminal " . l:command
-endfunction
-
-function s:close_last_window_if_open()
-  if s:check_if_window_is_alive(g:cmake_last_window)
-    call nvim_win_close(g:cmake_last_window, v:true)
-  endif
-endf
-
-function s:close_last_buffer_if_open()
-  if s:check_if_buffer_is_alive(g:cmake_last_buffer)
-    call nvim_buf_delete(g:cmake_last_buffer, {"force": v:true})
-  endif
-endf
-
-function s:cmake_run_target_with_name(target)
-  let s:cmake_target_file = s:get_cmake_build_dir() . '/' . g:tar_to_relative[a:target]
-  try
-    exec '!cmake --build ' . s:get_cmake_build_dir() . ' --target ' . a:target
-  catch /.*/
-    echo 'Failed to build ' . a:target
-  finally
-    call s:get_only_window()
-    exe "terminal " . s:cmake_target
-  endtry
 endfunction
 
 function s:cmake_get_target_and_run_action(name_relative_pairs, action)
@@ -288,8 +253,8 @@ function s:start_gdb(job_id, exit_code, event)
   let l:init_file = '/tmp/gdbinitvimcmake'
   let l:f = writefile(l:commands, l:init_file)
 
-  call s:close_last_window_if_open()
-  call s:close_last_buffer_if_open()
+  call v:lua.require("cmake").close_last_window_if_open()
+  call v:lua.require("cmake").close_last_buffer_if_open()
 
   let l:gdb_init_arg = ' -x /tmp/gdbinitvimcmake '
   let l:exec = 'GdbStart gdb -q ' . l:gdb_init_arg . ' --args ' . s:get_cmake_target_file() . " " . s:get_cmake_target_args()
@@ -325,8 +290,8 @@ function s:start_lldb(job_id, exit_code, event)
   let l:init_file = '/tmp/lldbinitvimcmake'
   let l:f = writefile(l:commands, l:init_file)
 
-  call s:close_last_window_if_open()
-  call s:close_last_buffer_if_open()
+  call v:lua.require("cmake").close_last_window_if_open()
+  call v:lua.require("cmake").close_last_buffer_if_open()
 
   if exists('l:init_file')
     let l:lldb_init_arg = ' -s /tmp/lldbinitvimcmake '
@@ -430,8 +395,8 @@ function s:start_nvim_dap_lldb_vscode(job_id, exit_code, event)
   let l:init_file = '/tmp/lldbinitvimcmake'
   let l:f = writefile(l:commands, l:init_file)
 
-  call s:close_last_window_if_open()
-  call s:close_last_buffer_if_open()
+  call v:lua.require("cmake").close_last_window_if_open()
+  call v:lua.require("cmake").close_last_buffer_if_open()
 
   if exists('l:init_file')
     let l:lldb_init_arg = ' /tmp/lldbinitvimcmake '
@@ -542,17 +507,6 @@ function s:get_build_tools(...)
   return ["vim-dispatch", "vsplit", "Makeshift", "make", "job"]
 endfunction
 
-function s:run_lit_on_file()
-  let l:full_path = expand("%:p")
-  if filereadable(s:get_cmake_build_dir() . "/bin/llvm-lit")
-    let l:lit_path = s:get_cmake_build_dir() . "/bin/llvm-lit"
-  else
-    let l:lit_path = "llvm-lit"
-  endif
-  call s:get_only_window()
-  call termopen([l:lit_path, s:get_state("extralit_args"), l:full_path])
-endfunction
-
 function s:cmake_load()
   " do nothing ... just enables my new build dir grep command to work
 endfunction
@@ -587,7 +541,7 @@ command! -nargs=* -complete=shellcmd CMakeCreateFile call s:cmake_create_file(<f
 
 command! -nargs=1 -complete=shellcmd CMakeCloseWindow call v:lua.require("cmake").cmake_close_windows()
 
-command! -nargs=0 CMakeRunLitOnFile call s:run_lit_on_file()
+command! -nargs=0 CMakeRunLitOnFile call v:lua.require("cmake").run_lit_on_file()
 
 command! -nargs=0 CMakeLoad call s:cmake_load()
 

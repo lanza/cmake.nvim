@@ -437,6 +437,17 @@ function M.add_name_relative_pair(name, is_exec, is_artifact, relative)
   })
 end
 
+function M.run_lit_on_file()
+  local full_path = vim.fn.expand("%:p")
+  local lit_path = "llvm-lit"
+  local bin_lit_path = M.get_cmake_build_dir() .. "/bin/llvm-lit"
+  if vim.fn.filereadable(bin_lit_path) == 1 then
+    lit_path = bin_lit_path
+  end
+  M.get_only_window()
+  vim.fn.termopen({ lit_path, M.state.extra_lit_args, full_path })
+end
+
 function M.setup(opts) end
 
 return M
