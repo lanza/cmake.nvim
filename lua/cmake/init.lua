@@ -182,12 +182,82 @@ end
 
 function M.cmake_build_current_target(tool)
   local previous_build_tool = vim.g.vim_cmake_build_tool
-  if tool ~= nil then
+  if tool ~= nil and tool ~= "" then
     vim.g.vim_cmake_build_tool = tool
   end
 
-  M.cmake_build_current_target_with_completion(function() end)
-  vim.g.vim_cmake_build_tool = previous_build_tool
+  local build_dir = M.get_cmake_build_dir()
+  local source_dir = M.get_cmake_source_dir()
+
+  local handler1 = function()
+    if M.get_cmake_target_file() ~= nil then
+      M._build_target_with_completion(M.get_cmake_target_name(), function() end)
+      return
+    end
+
+    local names = {}
+    for _, target in ipairs(M.get_name_relative_pairs()) do
+      local name = target.name
+      table.insert(names, name)
+    end
+
+    local handler = function(target_name)
+      if M.get_cmake_target_file() ~= nil then
+        M._build_target_with_completion(M.get_cmake_target_name(), function() end)
+      end
+
+      M.select_target(target_name)
+
+      M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), function()
+        M.select_target(target_name)
+        if M.get_cmake_target_file() == nil then
+          M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M._update_target_and_build)
+          return
+        end
+
+        M._build_target_with_completion(M.get_cmake_target_name(), function() end)
+      end)
+      return
+    end
+
+
+    if #names == 1 then
+      handler(names[1])
+    else
+      vim.o.makeprg = M.state.build_command
+      vim.ui.select(names, { prompt = 'Select Target:' }, handler)
+    end
+
+    return
+  end
+
+  if vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/reply") == 1 then
+    M.parse_codemodel_json()
+    handler1()
+    vim.g.vim_cmake_build_tool = previous_build_tool
+    return
+  end
+
+  if vim.fn.filereadable(source_dir .. "/CMakeLists.txt") == 0 then
+    if vim.g.cmake_template_file ~= nil then
+      vim.cmd.system("cp " .. vim.g.cmake_template_file .. " " .. source_dir .. "/CMakeLists.txt")
+    else
+      print("Could not find a CMakeLists at directory " .. source_dir)
+      return
+    end
+  end
+
+  local command = M.state.cmake_tool .. " " .. M.get_cmake_argument_string()
+  print(command)
+  M.get_only_window()
+  vim.fn.termopen(vim.fn.split(command), {
+    on_exit =
+        function()
+          M.parse_codemodel_json()
+          handler1()
+          vim.g.vim_cmake_build_tool = previous_build_tool
+        end
+  })
 end
 
 function M._build_target_with_completion(target, completion)
@@ -221,7 +291,7 @@ function M._build_target_with_completion(target, completion)
     -- endif
   else
     print(vim.g.vim_cmake_build_tool)
-    print(vim.g.vim_cmake_build_tool .. " NYI")
+    print("Tool: " .. vim.g.vim_cmake_build_tool .. " NYI")
   end
 end
 
@@ -250,7 +320,7 @@ function M._do_build_all_with_completion(action)
     --   echo 'Your g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.'
     -- endif
   else
-    print(vim.g.cmake_build_tool .. " NYI")
+    print("Tool: " .. vim.g.cmake_build_tool .. " NYI")
   end
 end
 
@@ -578,7 +648,7 @@ end
 
 function M.configure_and_generate_with_completion(completion)
   if vim.fn.filereadable(M.get_cmake_source_dir() .. "/CMakeLists.txt") == 0 then
-    print("NYI")
+    print("missing cmakelists.txt NYI")
     -- if exists("g:cmake_template_file")
     --   silent exec "! cp " . g:cmake_template_file . " " . v:lua.require("cmake").get_cmake_source_dir() . "/CMakeLists.txt" else
     --   echom "Could not find a CMakeLists at directory " . v:lua.require("cmake").get_cmake_source_dir()
@@ -659,7 +729,7 @@ end
 
 function M.get_execs_from_name_relative_pairs()
   -- let l:filtered = filter(s:get_name_relative_pairs(), "v:val.is_exec")
-  print("NYI")
+  print("get execs_from_name_relative_pairs NYI")
 end
 
 function M.cmake_close_windows()
@@ -860,7 +930,7 @@ function M.get_build_tools()
 end
 
 function M.cmake_create_file(args)
-  print("NYI")
+  print("create_cmake_file NYI")
   -- if len(a:000) > 2 || len(a:000) == 0
   --   echo 'CMakeCreateFile requires 1 or 2 arguments: e.g. Directory File for `Directory/File.{cpp,h}`'
   --   return
