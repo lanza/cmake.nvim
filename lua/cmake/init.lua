@@ -43,12 +43,8 @@ end
 ---@field dir_cache_object CMakeDirectory?
 ---@field current_target_cache_object CMakeTarget?
 
-function M.set_dco(key, value)
-  M.state.dir_cache_object[key] = value
-end
-
-function M.get_dco(key)
-  return M.state.dir_cache_object[key]
+function M.get_dco()
+  return M.state.dir_cache_object
 end
 
 function M.get_current_target_file()
@@ -320,35 +316,6 @@ function M._build_target_with_completion(target, completion)
   end
 end
 
-function M._do_build_all_with_completion(action)
-  if vim.g.vim_cmake_build_tool == "vsplit" then
-    local command = "cmake --build " .. M.get_build_dir()
-    M.get_only_window()
-    vim.fn.termopen(command, { on_exit = action })
-    -- elseif g:vim_cmake_build_tool ==? 'Makeshift'
-    --   let &makeprg = s:get_state("build_command")
-    --   let cwd = getcwd()
-    --   let b:makeshift_root = cwd . '/' . s:get_cmake_build_dir()
-    --   " completion not honored
-    --   MakeshiftBuild
-    -- elseif g:vim_cmake_build_tool ==? 'vim-dispatch'
-    --   let cwd = getcwd()
-    --   let &makeprg = s:get_state("build_command") . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
-    --   " completion not honored
-    --   Make
-    -- elseif g:vim_cmake_build_tool ==? 'make'
-    --   let cwd = getcwd()
-    --   let &makeprg = s:get_state("build_command") . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
-    --   " completion not honored
-    --   make
-    -- else
-    --   echo 'Your g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.'
-    -- endif
-  else
-    print("Tool: " .. vim.g.cmake_build_tool .. " NYI")
-  end
-end
-
 function M.configure_and_generate()
   M.configure_and_generate_with_completion(function() end)
 end
@@ -392,7 +359,7 @@ function M.get_cmake_argument_string()
   end
   if not found_source_dir_arg then
     table.insert(arguments, "-S")
-    table.insert(arguments, M.get_dco("source_dir"))
+    table.insert(arguments, M.get_dco().source_dir)
   end
   if not found_build_dir_arg then
     table.insert(arguments, "-B")
@@ -662,7 +629,7 @@ function M.get_debugger()
 end
 
 function M.get_source_dir()
-  return M.get_dco("source_dir")
+  return M.get_dco().source_dir
 end
 
 function M.configure_and_generate_with_completion(completion)
@@ -731,15 +698,38 @@ function M.parse_codemodel_json_with_completion(completion)
   end
 end
 
-function M.cmake_build_all_with_completion(action)
-  M.parse_codemodel_json_with_completion(function()
-    M._do_build_all_with_completion(action)
-    action()
-  end)
-end
-
 function M.cmake_build_all()
-  M.cmake_build_all_with_completion(function() end)
+  M.parse_codemodel_json_with_completion(function(action)
+    if vim.g.vim_cmake_build_tool == "vsplit" then
+      local command = "cmake --build " .. M.get_build_dir()
+      M.get_only_window()
+      vim.fn.termopen(command, { on_exit = action })
+    elseif vim.g.vim_cmake_build_tool == "Makeshift" then
+      print("Makeshift NYI")
+      --   let &makeprg = s:get_state("build_command")
+      --   let cwd = getcwd()
+      --   let b:makeshift_root = cwd . '/' . s:get_cmake_build_dir()
+      --   " completion not honored
+      --   MakeshiftBuild
+    elseif vim.g.vim_cmake_build_tool == "vim-dispatch" then
+      print("vim-dispatch NYI")
+      --   let cwd = getcwd()
+      --   let &makeprg = s:get_state("build_command") . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
+      --   " completion not honored
+      --   Make
+    elseif vim.g.vim_cmake_build_tool == "make" then
+      print("make NYI")
+      --   let cwd = getcwd()
+      --   let &makeprg = s:get_state("build_command") . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
+      --   " completion not honored
+      --   make
+      -- else
+      -- endif
+    else
+      print(
+        "vim.g.vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.")
+    end
+  end)
 end
 
 function M.get_executable_targets()
@@ -803,7 +793,7 @@ function M.add_dco_target_if_new(name, target_object)
     target_object.args = ""
   end
   M.state.dir_cache_object.targets[name] = target_object
-  -- print(vim.inspect(M.get_dco("targets")))
+  -- print(vim.inspect(M.get_dco().targets))
 end
 
 function M.set_ctco(key, value)
@@ -816,16 +806,6 @@ end
 
 function M.get_ctco(key)
   return M.state.current_target_cache_object[key]
-end
-
-function M.set_dco_if_empty(key, value)
-  if M.state.dir_cache_object[key] == nil then
-    M.state.dir_cache_object[key] = value
-  end
-end
-
-function M.get_state(key)
-  return M.state[key]
 end
 
 function M.set_state(key, value)
@@ -855,12 +835,12 @@ function M.cmake_open_cache_file()
 end
 
 function M.cmake_set_cmake_args(cmake_args)
-  M.set_dco("cmake_arguments", cmake_args)
+  M.get_dco().cmake_arguments = cmake_args
   M.write_cache_file()
 end
 
 function M.get_cmake_args()
-  return M.get_dco("cmake_arguments")
+  return M.get_dco().cmake_arguments
 end
 
 function M.edit_run_args()
@@ -890,7 +870,7 @@ end
 function M.edit_source_dir()
   vim.ui.input({
     prompt = "Source Directory: ",
-    default = M.get_dco("source_dir"),
+    default = M.get_dco().source_dir,
   }, function(input)
     if input == nil then
       return
@@ -947,12 +927,12 @@ function M.cmake_clean()
 end
 
 function M.cmake_update_build_dir(build_dir)
-  M.set_dco("build_dir", build_dir)
+  M.get_dco().build_dir = build_dir
   M.write_cache_file()
 end
 
 function M.cmake_update_source_dir(source_dir)
-  M.set_dco("source_dir", source_dir)
+  M.get_dco().source_dir = source_dir
   M.write_cache_file()
 end
 
