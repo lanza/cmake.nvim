@@ -66,21 +66,25 @@ function M.initialize_cache_file()
 
   local global_cache_object = (function()
     if vim.fn.filereadable(cache_file_path) == 0 then
-      vim.fn.writefile({ "{}" }, vim.env.HOME .. "/.vim_cmake.json")
+      vim.fn.writefile({ "{}" }, cache_file_path)
     end
     local file_contents = vim.fn.readfile(cache_file_path) or ""
     local json_string = table.concat(file_contents, "\n")
     return vim.fn.json_decode(json_string)
   end)()
 
-  local dir_cache_object = global_cache_object[cwd] or {
-    cmake_arguments = {},
-    build_dir = default_build_dir,
-    source_dir = ".",
-    targets = {},
-    phoney_targets = {},
-    current_target = nil,
-  }
+  if global_cache_object[cwd] == nil then
+    global_cache_object[cwd] = {
+      cmake_arguments = {},
+      build_dir = default_build_dir,
+      source_dir = ".",
+      targets = {},
+      phoney_targets = {},
+      current_target = nil,
+    }
+  end
+  local dir_cache_object = global_cache_object[cwd]
+
   local current_target_cache_object = dir_cache_object.targets[dir_cache_object.current_target]
 
   M.state = {
@@ -774,7 +778,6 @@ function M.select_target(target_name)
   assert(target_name ~= nil, "Invalid target to select_target")
   assert(target_name ~= "", "Invalid target to select_target")
 
-  inspect(M.state.dir_cache_object)
   M.state.dir_cache_object.current_target = target_name
   M.state.current_target_cache_object = M.state.dir_cache_object.targets[target_name]
 
@@ -825,11 +828,6 @@ function M.get_state(key)
   return M.state[key]
 end
 
-function M.bind_ctco()
-  local ct = M.state.dir_cache_object.current_target
-  M.state.current_target_cache_object = M.state.dir_cache_object.targets[ct]
-end
-
 function M.set_state(key, value)
   M.state[key] = value
 end
@@ -838,7 +836,7 @@ function M.write_cache_file()
   local cache_file = M.state.global_cache_object
   local serial = vim.fn.json_encode(cache_file)
   local split = vim.fn.split(serial, "\n")
-  vim.fn.writefile(split, vim.env.HOME .. "/.vim_cmake.json")
+  vim.fn.writefile(split, M.state.cache_file_path)
 end
 
 function M.set_state_child(key, child, value)
