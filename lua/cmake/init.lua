@@ -30,7 +30,6 @@ end
 ---@field source_dir string
 ---@field targets table<string, CMakeTarget>
 ---@field phony_targets table<string, PhonyTarget>
----@field name_relative_pairs {name: string, relative: string?, is_exec: boolean, is_artifact: boolean}[]
 ---@field current_target_file string?
 
 ---@class CMakeState
@@ -80,7 +79,6 @@ function M.initialize_cache_file()
     source_dir = ".",
     targets = {},
     phoney_targets = {},
-    name_relative_pairs = {},
     current_target = nil,
   }
   local current_target_cache_object = dir_cache_object.targets[dir_cache_object.current_target]
@@ -740,11 +738,6 @@ function M.cmake_build_all()
   M.cmake_build_all_with_completion(function() end)
 end
 
----@return {name: string, relative: boolean, is_exec: boolean, is_artifact: boolean}[]
-function M.get_name_relative_pairs()
-  return M.state.dir_cache_object.name_relative_pairs
-end
-
 function M.get_executable_targets()
   local names = {}
   for _, target in ipairs(M.state.dir_cache_object.targets) do
@@ -857,15 +850,6 @@ function M.set_state_child(key, child, value)
   -- print("After: " .. vim.inspect(M.state[key]))
   -- print("DCO: " .. vim.inspect(M.state.dir_cache_object))
   -- print("CO: " .. vim.inspect(M.state.cache_object["/private/tmp/g4f8"]))
-end
-
-function M.add_name_relative_pair(name, is_exec, is_artifact, relative)
-  table.insert(M.state.dir_cache_object.name_relative_pairs, {
-    name = name,
-    relative = relative,
-    is_exec = is_exec,
-    is_artifact = is_artifact,
-  })
 end
 
 function M.cmake_open_cache_file()
