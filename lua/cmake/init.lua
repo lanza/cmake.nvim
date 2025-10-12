@@ -628,33 +628,32 @@ function M.configure_and_generate_with_completion(completion)
   vim.fn.termopen(vim.fn.split(command), { on_exit = completion })
 end
 
-function M._run_current_target(job_id, exit_code, event)
-  M.close_last_buffer_if_open()
-  if exit_code == 0 then
-    M.get_only_window()
-    vim.cmd.terminal(M.get_current_target_name() .. " " .. M.get_run_args())
-  end
-  vim.g.vim_cmake_build_tool = vim.g.vim_cmake_build_tool_old
-end
-
 function M._update_target_and_run(target)
   M.select_target(target)
   M._do_run_current_target()
 end
 
 function M._do_run_current_target()
-  local target_file = M.get_current_target_name()
-  if target_file == "" or target_file == nil then
-    M.cmake_get_target_and_run_action(M._update_target_and_run)
-    return
-  end
+  local target_name = M.get_current_target_name()
+  assert(target_name ~= nil and target_name ~= "", "This should never be unset")
+
+  local target_file = M.get_dco().targets[target_name].current_target_file
 
   vim.g.vim_cmake_build_tool_old = vim.g.vim_cmake_build_tool
   if vim.g.vim_cmake_build_tool ~= "vsplit" then
     vim.g.vim_cmake_build_tool = "vsplit"
   end
 
-  M.cmake_build_current_target_with_completion(M._run_current_target)
+  M.cmake_build_current_target_with_completion(function(_, exit_code, _)
+    M.close_last_buffer_if_open()
+    if exit_code == 0 then
+      M.get_only_window()
+      vim.cmd.terminal(target_file .. " " .. M.get_run_args())
+    else
+      print("Build failed, cannot run target")
+    end
+    vim.g.vim_cmake_build_tool = vim.g.vim_cmake_build_tool_old
+  end)
 end
 
 function M.cmake_run_current_target()
