@@ -8,34 +8,9 @@ else
   let g:loaded_vim_cmake = 1
 endif
 
-
-function s:get_cmake_target_file()
-  return v:lua.require("cmake").get_dco("current_target_file")
-endfunction
-
-function s:get_cmake_target_args()
-  return v:lua.require("cmake").get_ctco("args")
-endfunction
-
-function s:get_cmake_build_dir()
-  return v:lua.require("cmake").get_dco("build_dir")
-endfunction
-
-function s:get_cmake_source_dir()
-  return v:lua.require("cmake").get_dco("source_dir")
-endfunction
-
-function s:get_cmake_cache_file()
-  return v:lua.require("cmake").state.cache_object
-endfunction
-
-function s:get_state(key)
-  return v:lua.require("cmake").get_state(a:key)
-endfunction
-
 " this needs to be wrapped due to the need to use on_exit to pipeline the config
 function g:cmake#ParseCodeModelJson()
-  let l:build_dir = s:get_cmake_build_dir()
+  let l:build_dir = v:lua.require("cmake").get_cmake_build_dir()
   let l:cmake_query_response = l:build_dir . '/.cmake/api/v1/reply/'
   let l:codemodel_file = globpath(l:cmake_query_response, 'codemodel*')
   let l:codemodel_contents = readfile(l:codemodel_file)
@@ -84,84 +59,17 @@ function g:cmake#ParseCodeModelJson()
   return 1
 endf
 
-function s:get_cmake_argument_string()
-  let l:build_dir = s:get_cmake_build_dir()
-  if !isdirectory(l:build_dir . '/.cmake/api/v1/query')
-    call mkdir(l:build_dir . '/.cmake/api/v1/query', 'p')
-  endif
-  if !filereadable(l:build_dir . '/.cmake/api/v1/query/codemodel-v2')
-    call writefile([' '], l:build_dir . '/.cmake/api/v1/query/codemodel-v2')
-  endif
-  let l:arguments = []
-  let l:arguments += v:lua.require("cmake").get_cmake_args()
-  let l:arguments += ['-G ' . s:get_state("generator")]
-  let l:arguments += ['-DCMAKE_EXPORT_COMPILE_COMMANDS=ON']
-
-  let found_source_dir_arg = v:false
-  let found_build_dir_arg = v:false
-  let found_cmake_build_type = v:false
-  for arg in v:lua.require("cmake").get_cmake_args()
-    if (arg =~ "CMAKE_BUILD_TYPE")
-      let found_cmake_build_type = v:true
-    elseif (arg =~ "-S")
-      let found_source_dir_arg = v:true
-    elseif (arg =~ "-B")
-      let found_build_dir_arg = v:true
-    elseif (isdirectory(arg) && filereadable(arg . "/CMakeLists.txt"))
-      let found_source_dir_arg = v:true
-    endif
-  endfor
-
-  if !found_cmake_build_type
-    let l:arguments += ['-DCMAKE_BUILD_TYPE=Debug']
-  endif
-
-  if !found_build_dir_arg
-    let l:arguments += ['-B', s:get_cmake_build_dir()]
-  endif
-
-  if !found_source_dir_arg
-    let l:arguments += ['-S', s:get_cmake_source_dir()]
-  endif
-
-  let l:command = join(l:arguments, ' ')
-  return l:command
-endfunction
-
-function g:cmake#ConfigureAndGenerateWithCompletion(completion)
-  if !filereadable(s:get_cmake_source_dir() . "/CMakeLists.txt")
-    if exists("g:cmake_template_file")
-      silent exec "! cp " . g:cmake_template_file . " " . s:get_cmake_source_dir() . "/CMakeLists.txt"
-    else
-      echom "Could not find a CMakeLists at directory " . s:get_cmake_source_dir()
-      return
-    endif
-  endif
-  let l:command = s:get_state("cmake_tool") . " " . s:get_cmake_argument_string()
-  echo l:command
-  call v:lua.require("cmake").get_only_window()
-  call termopen(split(l:command), {'on_exit': a:completion})
-  " let l:link_cc_path = getcwd() . '/' . s:get_source_dir() . '/compile_commands.json'
-  " let l:build_cc_path = getcwd() . '/' . s:get_build_dir() . '/compile_commands.json'
-  " exe 'silent !test -L ' . l:link_cc_path . ' || test -e ' . l:link_cc_path . ' || ln -s ' . l:build_cc_path . .'
-endfunction
-
-function s:noop_function(...)
-endfunction
-
-let s:noop = function('s:noop_function')
-
 " TODO: Fix this breakpoint handling
 function s:start_gdb(job_id, exit_code, event)
   if a:exit_code != 0
     return
   endif
   let l:commands = ['b main', 'r']
-  let l:data = s:get_cmake_cache_file()
+  let l:data = v:lua.require("cmake").get_cmake_cache_file()
   if has_key(l:data, getcwd())
     let l:dir = l:data[getcwd()]['targets']
-    if has_key(l:dir, s:get_cmake_build_dir() . '/' . s:get_cmake_target_file())
-      let l:target = l:dir[s:get_cmake_build_dir() . '/' . s:get_cmake_target_file()]
+    if has_key(l:dir, v:lua.require("cmake").get_cmake_build_dir() . '/' . v:lua.require("cmake").get_cmake_target_file())
+      let l:target = l:dir[v:lua.require("cmake").get_cmake_build_dir() . '/' . v:lua.require("cmake").get_cmake_target_file()]
       if has_key(l:target, 'breakpoints')
         let l:breakpoints = l:target['breakpoints']
         for b in l:breakpoints
@@ -182,7 +90,7 @@ function s:start_gdb(job_id, exit_code, event)
   call v:lua.require("cmake").close_last_buffer_if_open()
 
   let l:gdb_init_arg = ' -x /tmp/gdbinitvimcmake '
-  let l:exec = 'GdbStart gdb -q ' . l:gdb_init_arg . ' --args ' . s:get_cmake_target_file() . " " . s:get_cmake_target_args()
+  let l:exec = 'GdbStart gdb -q ' . l:gdb_init_arg . ' --args ' . v:lua.require("cmake").get_cmake_target_file() . " " . v:lua.require("cmake").get_cmake_target_args()
   " echom l:exec
   exec l:exec
 endfunction
@@ -197,9 +105,9 @@ function s:start_lldb(job_id, exit_code, event)
     call add(l:commands, "breakpoint set --func-regex '^main$'")
   endif
 
-  let l:data = s:get_cmake_cache_file()
+  let l:data = v:lua.require("cmake").get_cmake_cache_file()
   if has_key(l:data, getcwd())
-    let l:breakpoints = l:data[getcwd()]["targets"][s:get_cmake_target_file()]["breakpoints"]
+    let l:breakpoints = l:data[getcwd()]["targets"][v:lua.require("cmake").get_cmake_target_file()]["breakpoints"]
     for b in keys(l:breakpoints)
       echom b
       let l:bp = l:breakpoints[b]
@@ -223,7 +131,7 @@ function s:start_lldb(job_id, exit_code, event)
   else
     let l:lldb_init_arg = ''
   endif
-  exec 'GdbStartLLDB lldb ' . s:get_cmake_target_file() . l:lldb_init_arg . ' -- ' . s:get_cmake_target_args()
+  exec 'GdbStartLLDB lldb ' . v:lua.require("cmake").get_cmake_target_file() . l:lldb_init_arg . ' -- ' . v:lua.require("cmake").get_cmake_target_args()
 endfunction
 
 function s:toggle_file_line_column_breakpoint()
@@ -269,7 +177,7 @@ endfunction
 
 function g:CMake_list_breakpoints()
   let args = []
-  let l:bps = s:get_cmake_cache_file()[getcwd()]["targets"][s:get_cmake_target_file()]["breakpoints"]
+  let l:bps = v:lua.require("cmake").get_cmake_cache_file()[getcwd()]["targets"][v:lua.require("cmake").get_cmake_target_file()]["breakpoints"]
   for bp in keys(l:bps)
     let l:b = l:bps[bp]
     if l:b["enabled"]
@@ -281,8 +189,8 @@ function g:CMake_list_breakpoints()
 endfunction
 
 function s:toggle_breakpoint(break_string)
-  let l:data = s:get_cmake_cache_file()
-  let l:breakpoints = l:data[getcwd()]['targets'][s:get_cmake_target_file()]["breakpoints"]
+  let l:data = v:lua.require("cmake").get_cmake_cache_file()
+  let l:breakpoints = l:data[getcwd()]['targets'][v:lua.require("cmake").get_cmake_target_file()]["breakpoints"]
   if has_key(l:breakpoints, a:break_string)
     let l:breakpoints[a:break_string]["enabled"] = !l:breakpoints[a:break_string]["enabled"]
   else
@@ -300,11 +208,11 @@ function s:start_nvim_dap_lldb_vscode(job_id, exit_code, event)
     return
   endif
   let l:commands = ["breakpoint set --func-regex '^main$'", 'r']
-  let l:data = s:get_cmake_cache_file()
+  let l:data = v:lua.require("cmake").get_cmake_cache_file()
   if has_key(l:data, getcwd())
     let l:dir = l:data[getcwd()]['targets']
-    if has_key(l:dir, s:get_cmake_build_dir() . '/' . s:get_cmake_target_file())
-      let l:target = l:dir[s:get_cmake_build_dir() . '/' . s:get_cmake_target_file()]
+    if has_key(l:dir, v:lua.require("cmake").get_cmake_build_dir() . '/' . v:lua.require("cmake").get_cmake_target_file())
+      let l:target = l:dir[v:lua.require("cmake").get_cmake_build_dir() . '/' . v:lua.require("cmake").get_cmake_target_file()]
       if has_key(l:target, 'breakpoints')
         let l:breakpoints = l:target['breakpoints']
         for b in l:breakpoints
@@ -328,7 +236,7 @@ function s:start_nvim_dap_lldb_vscode(job_id, exit_code, event)
   else
     let l:lldb_init_arg = ''
   endif
-  exec 'DebugLldb ' . s:get_cmake_target_file() . ' --lldbinit ' . l:lldb_init_arg . ' -- ' . s:get_cmake_target_args()
+  exec 'DebugLldb ' . v:lua.require("cmake").get_cmake_target_file() . ' --lldbinit ' . l:lldb_init_arg . ' -- ' . v:lua.require("cmake").get_cmake_target_args()
 endfunction
 
 function s:cmake_debug_current_target_nvim_dap_lldb_vscode()
@@ -352,11 +260,11 @@ function s:cmake_debug_current_target()
 endfunction
 
 function s:_do_debug_current_target()
-  if s:get_cmake_target_file() == v:null
+  if v:lua.require("cmake").get_cmake_target_file() == v:null
     call v:lua.require("cmake").cmake_get_target_and_run_action("THIS IS BROKEN", 's:update_target')
   endif
 
-  if s:get_state("debugger") ==? 'gdb'
+  if v:lua.require("cmake").get_debugger() ==? 'gdb'
     call v:lua.require("cmake").cmake_build_current_target_with_completion(function('s:start_gdb'))
   elseif v:lua.require("cmake").get_state("debugger") ==? 'lldb'
     call v:lua.require("cmake").cmake_build_current_target_with_completion(function('s:start_lldb'))
@@ -385,13 +293,12 @@ command! -nargs=1 -complete=shellcmd CMakeCloseWindow call v:lua.require("cmake"
 command! -nargs=0 CMakeRunLitOnFile call v:lua.require("cmake").run_lit_on_file()
 command! -nargs=0 CMakeLoad call v:lua.require("cmake").cmake_load()
 
-command! CMakeEditCMakeArgs call v:lua.require("cmake").edit_cmake_args()
+command! -nargs=0 CMakeConfigureAndGenerate call v:lua.require("cmake").configure_and_generate()
 
 command! -nargs=0 CMakeToggleFileLineColumnBreakpoint call s:toggle_file_line_column_breakpoint()
 command! -nargs=0 CMakeToggleFileLineBreakpoint call s:toggle_file_line_breakpoint()
 command! -nargs=0 CMakeListBreakpoints call g:CMake_list_breakpoints()
 command! -nargs=0 CMakeToggleBreakAtMain call s:toggle_break_at_main()
-command! -nargs=0  CMakeConfigureAndGenerate call g:cmake#ConfigureAndGenerateWithCompletion(s:noop)
 command! -nargs=0 CMakeDebugWithNvimLLDB call s:cmake_debug_current_target_lldb()
 command! -nargs=0 CMakeDebugWithNvimGDB call s:cmake_debug_current_target_gdb()
 command! -nargs=0 CMakeDebugWithNvimDapLLDBVSCode call s:cmake_debug_current_target_nvim_dap_lldb_vscode()

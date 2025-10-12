@@ -94,6 +94,10 @@ function M.get_cmake_target_args()
   return M.get_ctco("args")
 end
 
+function M.get_cmake_cache_file()
+  return M.state.cache_object
+end
+
 function M.get_cmake_target_file()
   return M.state.dir_cache_object.current_target_file
 end
@@ -248,7 +252,83 @@ function M._do_build_all_with_completion(action)
 end
 
 M.parse_codemodel_json = vim.fn["g:cmake#ParseCodeModelJson"]
-M.cmake_configure_and_generate_with_completion = vim.fn["g:cmake#ConfigureAndGenerateWithCompletion"]
+
+function M.configure_and_generate()
+  M.configure_and_generate_with_completion(function() end)
+end
+
+function M.get_cmake_argument_string()
+  local build_dir = M.get_cmake_build_dir()
+  if not vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/query") then
+    vim.fn.mkdir(build_dir .. "/.cmake/api/v1/query", "p")
+  end
+  if not vim.fn.filereadable(build_dir .. "/.cmake/api/v1/query/codemodel-v2") then
+    vim.fn.writefile({ " " }, build_dir .. "/.cmake/api/v1/query/codemodel-v2")
+  end
+  local arguments = {
+    "-G",
+    M.state.generator,
+    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+  }
+
+  for _, arg in ipairs(M.get_cmake_args()) do
+    table.insert(arguments, arg)
+  end
+
+  local found_cmake_build_type = false
+  local found_source_dir_arg = false
+  local found_build_dir_arg = false
+
+  for _, arg in ipairs(M.get_cmake_args()) do
+    if string.match(arg, "-DCMAKE_BUILD_TYPE=") then
+      found_cmake_build_type = true
+    elseif string.match(arg, "-S") then
+      found_source_dir_arg = true
+    elseif string.match(arg, "-B") then
+      found_build_dir_arg = true
+    elseif vim.fn.isdirectory(arg) == 1 then
+      found_source_dir_arg = true
+    end
+  end
+
+  if not found_cmake_build_type then
+    table.insert(arguments, "-DCMAKE_BUILD_TYPE=Debug")
+  end
+  if not found_source_dir_arg then
+    table.insert(arguments, "-S")
+    table.insert(arguments, M.get_dco("source_dir"))
+  end
+  if not found_build_dir_arg then
+    table.insert(arguments, "-B")
+    table.insert(arguments, M.get_cmake_build_dir())
+  end
+
+  return table.concat(arguments, " ")
+end
+
+function M.get_debugger()
+  return M.state.debugger
+end
+
+function M.get_cmake_source_dir()
+  return M.get_dco("source_dir")
+end
+
+function M.configure_and_generate_with_completion(completion)
+  if vim.fn.filereadable(M.get_cmake_source_dir() .. "/CMakeLists.txt") == 0 then
+    print("NYI")
+    -- if exists("g:cmake_template_file")
+    --   silent exec "! cp " . g:cmake_template_file . " " . v:lua.require("cmake").get_cmake_source_dir() . "/CMakeLists.txt" else
+    --   echom "Could not find a CMakeLists at directory " . v:lua.require("cmake").get_cmake_source_dir()
+    --   return
+    -- endif
+  end
+
+  local command = M.state.cmake_tool .. " " .. M.get_cmake_argument_string()
+  print(command)
+  M.get_only_window()
+  vim.fn.termopen(vim.fn.split(command), { on_exit = completion })
+end
 
 function M._run_current_target(job_id, exit_code, event)
   M.close_last_buffer_if_open()
@@ -290,7 +370,7 @@ end
 function M.parse_codemodel_json_with_completion(completion)
   local build_dir = M.get_cmake_build_dir()
   if not vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/reply") then
-    M.cmake_configure_and_generate_with_completion(completion)
+    M.configure_and_generate_with_completion(completion)
   else
     M.parse_codemodel_json()
     completion()
@@ -450,6 +530,15 @@ function M.get_cmake_args()
   return M.get_dco("cmake_arguments")
 end
 
+function M.edit_run_args()
+  vim.ui.input({
+    prompt = "Run Arguments: ",
+    default = M.get_cmake_target_args(),
+  }, function(input)
+    M.cmake_set_current_target_run_args(input)
+  end)
+end
+
 function M.edit_build_dir()
   vim.ui.input({
     prompt = "Build Directory: ",
@@ -471,9 +560,9 @@ end
 function M.edit_cmake_args()
   vim.ui.input({
     prompt = "CMake Arguments: ",
-    default = M.get_cmake_args(),
+    default = table.concat(M.get_cmake_args(), " "),
   }, function(input)
-    M.cmake_set_cmake_args(input)
+    M.cmake_set_cmake_args(vim.fn.split(input, " "))
   end)
 end
 
