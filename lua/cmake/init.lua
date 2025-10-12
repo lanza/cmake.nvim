@@ -90,6 +90,89 @@ function M.add_cmake_target_to_target_list(target_name)
   })
 end
 
+function M.get_cmake_build_dir()
+  return M.state.dir_cache_object.build_dir
+end
+
+local function is_absolute_path(path)
+  return vim.startswith(path, "/")
+end
+
+function M.check_if_window_is_alive(win)
+  return vim.fn.index(vim.api.nvim_list_wins(), win) > -1
+end
+
+function M.close_last_window_if_open()
+  if M.check_if_window_is_alive(vim.g.cmake_last_window) then
+    vim.api.nvim_win_close(vim.g.cmake_last_window, true)
+  end
+end
+
+function M.check_if_buffer_is_alive(buf)
+  return vim.fn.index(vim.api.nvim_list_bufs(), buf) > -1
+end
+
+function M.close_last_buffer_if_open()
+  if M.check_if_buffer_is_alive(vim.g.cmake_last_buffer) then
+    vim.api.nvim_buf_delete(vim.g.cmake_last_buffer, { force = true })
+  end
+end
+
+function M.get_only_window()
+  M.close_last_window_if_open()
+  M.close_last_buffer_if_open()
+  vim.cmd.vsplit()
+  vim.cmd.wincmd("L")
+  vim.cmd.enew()
+  vim.g.cmake_last_window = vim.api.nvim_get_current_win()
+  vim.g.cmake_last_buffer = vim.api.nvim_get_current_buf()
+end
+
+function M._do_build_all_with_completion(action)
+  -- local directory = M.get_cmake_build_dir()
+  -- if not is_absolute_path(directory) then
+  --   directory = vim.fn.getcwd() .. "/" .. directory
+  -- end
+
+  if vim.g.vim_cmake_build_tool == "vsplit" then
+    local command = "cmake --build " .. M.get_cmake_build_dir()
+    M.get_only_window()
+    vim.fn.termopen(command, { on_exit = action })
+    -- elseif g:vim_cmake_build_tool ==? 'Makeshift'
+    --   let &makeprg = s:get_state("build_command")
+    --   let cwd = getcwd()
+    --   let b:makeshift_root = cwd . '/' . s:get_cmake_build_dir()
+    --   " completion not honored
+    --   MakeshiftBuild
+    -- elseif g:vim_cmake_build_tool ==? 'vim-dispatch'
+    --   let cwd = getcwd()
+    --   let &makeprg = s:get_state("build_command") . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
+    --   " completion not honored
+    --   Make
+    -- elseif g:vim_cmake_build_tool ==? 'make'
+    --   let cwd = getcwd()
+    --   let &makeprg = s:get_state("build_command") . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
+    --   " completion not honored
+    --   make
+    -- else
+    --   echo 'Your g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.'
+    -- endif
+  else
+    print(vim.g.cmake_build_tool .. " NYI")
+  end
+end
+
+function M.cmake_build_all_with_completion(action)
+  vim.fn["g:cmake#ParseCodeModelJsonWithCompletion"](function()
+    M._do_build_all_with_completion(action)
+    action()
+  end)
+end
+
+function M.cmake_build_all()
+  M.cmake_build_all_with_completion(function() end)
+end
+
 function M._do_cmake_pick_executable_target(pairs)
   M.cmake_get_target_and_run_action(pairs, M.select_target)
   M.dump_current_target()

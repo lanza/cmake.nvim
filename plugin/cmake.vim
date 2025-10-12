@@ -81,7 +81,7 @@ function s:get_state(key)
 endfunction
 
 " this needs to be wrapped due to the need to use on_exit to pipeline the config
-function s:_do_parse_codemodel_json()
+function g:cmake#ParseCodeModelJson()
   let l:build_dir = s:get_cmake_build_dir()
   let l:cmake_query_response = l:build_dir . '/.cmake/api/v1/reply/'
   let l:codemodel_file = globpath(l:cmake_query_response, 'codemodel*')
@@ -143,12 +143,12 @@ function s:compose_completions(outer, inner)
   call a:outer(a:inner)
 endfunction
 
-function s:parse_codemodel_json_with_completion(completion)
+function g:cmake#ParseCodeModelJsonWithCompletion(completion)
   let l:build_dir = s:get_cmake_build_dir()
   if !isdirectory(l:build_dir . '/.cmake/api/v1/reply')
-    call s:assure_query_reply_with_completion(function('s:do_all_completions', [function('s:_do_parse_codemodel_json'), a:completion]))
+    call s:assure_query_reply_with_completion(function('s:do_all_completions', [function('g:cmake#ParseCodeModelJson'), a:completion]))
   else
-    call s:_do_parse_codemodel_json()
+    call g:cmake#ParseCodeModelJson()
     call a:completion()
   endif
 endfunction
@@ -286,6 +286,7 @@ function s:noop_function(...)
 endfunction
 
 let s:noop = function('s:noop_function')
+let g:NOOP = function('s:noop_function')
 
 function s:_update_target_and_build(target)
   call v:lua:require("cmake").select_target(target)
@@ -302,16 +303,8 @@ function s:_do_build_current_target_with_completion(completion)
   call s:_build_target_with_completion(s:get_cmake_target_name(), a:completion)
 endfunction
 
-function s:_do_build_all_with_completion(completion)
-  call s:_build_all_with_completion(a:completion)
-endfunction
-
-function s:cmake_build_all_with_completion(completion)
-  call s:parse_codemodel_json_with_completion(function('s:compose_completions', [function('s:_do_build_all_with_completion'), a:completion]))
-endfunction
-
 function s:cmake_build_current_target_with_completion(completion)
-  call s:parse_codemodel_json_with_completion(function('s:compose_completions', [function('s:_do_build_current_target_with_completion'), a:completion]))
+  call g:cmake#ParseCodeModelJsonWithCompletion(function('s:compose_completions', [function('s:_do_build_current_target_with_completion'), a:completion]))
 endfunction
 
 func s:is_absolute_path(path)
@@ -372,10 +365,6 @@ function s:cmake_clean()
   exe "vs | exe \"normal \<c-w>L\" | terminal " . l:command
 endfunction
 
-function s:cmake_build_all()
-  call s:cmake_build_all_with_completion(s:noop)
-endfunction
-
 function s:_build_all_with_completion(completion)
   if g:vim_cmake_build_tool ==? 'vsplit'
     let l:command = 'cmake --build ' . s:get_cmake_build_dir()
@@ -404,11 +393,11 @@ function s:_build_all_with_completion(completion)
 endfunction
 
 function s:cmake_pick_target()
-  call s:parse_codemodel_json_with_completion(function('s:_do_cmake_pick_target'))
+  call g:cmake#ParseCodeModelJsonWithCompletion(function('s:_do_cmake_pick_target'))
 endf
 
 function s:cmake_pick_executable_target()
-  call s:parse_codemodel_json_with_completion(function('s:_do_cmake_pick_executable_target'))
+  call g:cmake#ParseCodeModelJsonWithCompletion(function('s:_do_cmake_pick_executable_target'))
 endf
 
 function s:get_execs_from_name_relative_pairs()
@@ -473,7 +462,7 @@ endfunction
 
 function s:cmake_run_current_target()
   " echom "s:cmake_run_current_target()"
-  call s:parse_codemodel_json_with_completion(function("s:_do_run_current_target"))
+  call g:cmake#ParseCodeModelJsonWithCompletion(function("s:_do_run_current_target"))
 endfunction
 
 function s:dump_current_target()
@@ -706,7 +695,7 @@ function s:cmake_debug_current_target_gdb()
 endf
 
 function s:cmake_debug_current_target()
-  call s:parse_codemodel_json_with_completion(function("s:_do_debug_current_target"))
+  call g:cmake#ParseCodeModelJsonWithCompletion(function("s:_do_debug_current_target"))
 endfunction
 
 function s:_do_debug_current_target()
@@ -834,7 +823,7 @@ command! -nargs=* -complete=shellcmd CMakeSetCurrentTargetRunArgs call s:cmake_s
 command! -nargs=? -complete=customlist,s:get_build_tools CMakeBuildCurrentTarget call s:cmake_build_current_target(<f-args>)
 
 command! -nargs=1 -complete=shellcmd CMakeClean call s:cmake_clean()
-command! -nargs=0 CMakeBuildAll call s:cmake_build_all()
+command! -nargs=0 CMakeBuildAll call v:lua.require("cmake").cmake_build_all()
 
 command! -nargs=0 CMakeToggleFileLineColumnBreakpoint call s:toggle_file_line_column_breakpoint()
 command! -nargs=0 CMakeToggleFileLineBreakpoint call s:toggle_file_line_breakpoint()
