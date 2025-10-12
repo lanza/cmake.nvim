@@ -1,18 +1,5 @@
 local M = {}
 
---- Ensures that object[key] has a default value.
---- If object[key] is nil, sets it to val, then returns it.
----@param object table The table to modify
----@param key any The key to check in the table
----@param val any The default value to assign if key is missing
----@return any The value at object[key] after ensuring it's set
-function M.set_if_empty(object, key, val)
-  if object[key] == nil then
-    object[key] = val
-  end
-  return object
-end
-
 ---@class CMakeTarget
 ---@field args string[]
 ---@field breakpoints table<string, {text: string, enabled: boolean}>
@@ -38,6 +25,7 @@ end
 ---@field generator "Ninja" | "Unix Makefiles"
 ---@field build_command "ninja" | "make"
 ---@field debugger "lldb" | "gdb" | "nvim_dap_lldb_vscode"
+---@field extra_lit_args string
 ---@field cache_file_path string
 ---@field global_cache_object table<string, CMakeDirectory>
 ---@field dir_cache_object CMakeDirectory?
@@ -47,8 +35,8 @@ function M.get_dco()
   return M.state.dir_cache_object
 end
 
-function M.get_current_target_file()
-  return M.state.dir_cache_object.current_target
+function M.get_ctco()
+  return M.state.current_target_cache_object
 end
 
 function M.initialize_cache_file()
@@ -89,6 +77,7 @@ function M.initialize_cache_file()
     generator = "Ninja",
     build_command = "ninja",
     debugger = debugger,
+    extra_lit_args = extra_lit_args,
     cache_file_path = cache_file_path,
     global_cache_object = global_cache_object,
     dir_cache_object = dir_cache_object,
@@ -99,24 +88,16 @@ function M.initialize_cache_file()
   M.state.current_target_cache_object = M.state.dir_cache_object.targets[ct]
 end
 
-function M.get_cmake_target_args()
-  return M.get_ctco("args")
-end
-
-function M.get_cmake_cache_file()
-  return M.state.global_cache_object
+function M.get_run_args()
+  return M.get_ctco().args
 end
 
 function M.has_set_target()
   return M.state.current_target_cache_object ~= nil
 end
 
-function M.get_cmake_target_file()
+function M.get_current_target_name()
   return M.state.dir_cache_object.current_target
-end
-
-function M.get_cmake_target_name()
-  return M.state.current_target_cache_object.current_target_name
 end
 
 function M.get_build_dir()
@@ -162,7 +143,7 @@ function M._do_build_current_target()
 end
 
 function M.cmake_set_current_target_run_args(run_args)
-  if M.get_cmake_target_file() == nil then
+  if M.get_current_target_name() == nil then
     M.cmake_get_target_and_run_action(M.update_target)
     return
   end
@@ -177,12 +158,12 @@ function M._update_target_and_build(target_name)
 end
 
 function M._do_build_current_target_with_completion(completion)
-  if M.get_cmake_target_file() == nil then
+  if M.get_current_target_name() == nil then
     M.cmake_get_target_and_run_action(M._update_target_and_build)
     return
   end
 
-  M._build_target_with_completion(M.get_cmake_target_name(), completion)
+  M._build_target_with_completion(M.get_current_target_name(), completion)
 end
 
 function M.cmake_build_current_target_with_completion(completion)
@@ -224,7 +205,7 @@ function M.cmake_build_current_target(tool)
 
   -- build
   if M.has_query_reply() and M.has_set_target() then
-    M.build_target(M.get_cmake_target_name())
+    M.build_target(M.get_current_target_name())
     return
   end
 
@@ -240,12 +221,12 @@ function M.cmake_build_current_target(tool)
 
     if #names == 1 then
       M.select_target(names[1])
-      M.build_target(M.get_cmake_target_name())
+      M.build_target(M.get_current_target_name())
     else
       vim.o.makeprg = M.state.build_command
       vim.ui.select(names, { prompt = 'Select Target:' }, function(target_name)
         M.select_target(target_name)
-        M.build_target(M.get_cmake_target_name())
+        M.build_target(M.get_current_target_name())
       end)
     end
   end
@@ -393,7 +374,7 @@ function M.toggle_file_line_column_breakpoint()
 end
 
 function M.get_breakpoints()
-  return M.get_ctco("breakpoints")
+  return M.get_ctco().breakpoints
 end
 
 function M.toggle_breakpoint(break_string)
@@ -462,7 +443,7 @@ function M.start_lldb(job_id, exit_code, event)
   local lldb_init_arg = " -s " .. init_file
 
   vim.cmd("GdbStartLLDB lldb " ..
-    M.get_cmake_target_file() .. lldb_init_arg .. " " .. " -- " .. M.get_cmake_target_args())
+    M.get_current_target_name() .. lldb_init_arg .. " " .. " -- " .. M.get_run_args())
 end
 
 function M.start_gdb(job_id, exit_code, event)
@@ -494,7 +475,7 @@ function M.start_gdb(job_id, exit_code, event)
   local gdb_init_arg = " -s " .. init_file
 
   vim.cmd("GdbStartLLDB gdb -q " ..
-    gdb_init_arg .. " --args " .. M.get_cmake_target_file() .. " " .. M.get_cmake_target_args())
+    gdb_init_arg .. " --args " .. M.get_current_target_name() .. " " .. M.get_run_args())
 end
 
 local function read_json_file(file_path)
@@ -565,13 +546,12 @@ function M.start_nvim_dap_lldb_vscode(job_id, exit_code, event)
   M.close_last_buffer_if_open()
 
   local command = "DebugLldb " ..
-      M.get_cmake_target_file() .. " --lldbinit " .. init_file .. " -- " .. M.get_cmake_target_args()
-  -- inspect(command)
+      M.get_current_target_name() .. " --lldbinit " .. init_file .. " -- " .. M.get_run_args()
   vim.cmd(command)
 end
 
 function M._do_debug_current_target()
-  if M.get_cmake_target_file() == nil then
+  if M.get_current_target_name() == nil then
     M.cmake_get_target_and_run_action(M._update_target)
   end
 
@@ -652,7 +632,7 @@ function M._run_current_target(job_id, exit_code, event)
   M.close_last_buffer_if_open()
   if exit_code == 0 then
     M.get_only_window()
-    vim.cmd.terminal(M.get_cmake_target_file() .. " " .. M.get_cmake_target_args())
+    vim.cmd.terminal(M.get_current_target_name() .. " " .. M.get_run_args())
   end
   vim.g.vim_cmake_build_tool = vim.g.vim_cmake_build_tool_old
 end
@@ -663,7 +643,7 @@ function M._update_target_and_run(target)
 end
 
 function M._do_run_current_target()
-  local target_file = M.get_cmake_target_file()
+  local target_file = M.get_current_target_name()
   if target_file == "" or target_file == nil then
     M.cmake_get_target_and_run_action(M._update_target_and_run)
     return
@@ -761,7 +741,7 @@ function M.cmake_pick_target()
 end
 
 function M.dump_current_target()
-  print("Current target set to " .. M.get_ctco("current_target_file") .. " with args " .. M.get_ctco("args"))
+  print("Current target set to " .. M.get_ctco().current_target_file .. " with args " .. M.get_ctco().args)
 end
 
 function M.select_target(target_name)
@@ -793,19 +773,10 @@ function M.add_dco_target_if_new(name, target_object)
     target_object.args = ""
   end
   M.state.dir_cache_object.targets[name] = target_object
-  -- print(vim.inspect(M.get_dco().targets))
 end
 
 function M.set_ctco(key, value)
-  -- print("Before: " .. vim.inspect(M.state.current_target_cache_object))
   M.state.current_target_cache_object[key] = value
-  -- print("After: " .. vim.inspect(M.state.current_target_cache_object))
-  -- print("DCO: " .. vim.inspect(M.state.dir_cache_object))
-  -- print("CO: " .. vim.inspect(M.state.cache_object["/private/tmp/g4f8"]))
-end
-
-function M.get_ctco(key)
-  return M.state.current_target_cache_object[key]
 end
 
 function M.set_state(key, value)
@@ -820,14 +791,10 @@ function M.write_cache_file()
 end
 
 function M.set_state_child(key, child, value)
-  -- print("Before: " .. vim.inspect(M.state[key]))
   if M.state[key] == nil then
     M.state[key] = {}
   end
   M.state[key][child] = value
-  -- print("After: " .. vim.inspect(M.state[key]))
-  -- print("DCO: " .. vim.inspect(M.state.dir_cache_object))
-  -- print("CO: " .. vim.inspect(M.state.cache_object["/private/tmp/g4f8"]))
 end
 
 function M.cmake_open_cache_file()
@@ -846,7 +813,7 @@ end
 function M.edit_run_args()
   vim.ui.input({
     prompt = "Run Arguments: ",
-    default = M.get_cmake_target_args(),
+    default = M.get_run_args(),
   }, function(input)
     if input == nil then
       return
