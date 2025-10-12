@@ -248,7 +248,7 @@ function M._do_build_all_with_completion(action)
 end
 
 M.parse_codemodel_json = vim.fn["g:cmake#ParseCodeModelJson"]
-M.cmake_configure_and_generate_with_completion = vim.fn["g:cmake#CMakeConfigureAndGenerateWithCompletion"]
+M.cmake_configure_and_generate_with_completion = vim.fn["g:cmake#ConfigureAndGenerateWithCompletion"]
 
 function M._run_current_target(job_id, exit_code, event)
   M.close_last_buffer_if_open()
@@ -450,6 +450,24 @@ function M.get_cmake_args()
   return M.get_dco("cmake_arguments")
 end
 
+function M.edit_build_dir()
+  vim.ui.input({
+    prompt = "Build Directory: ",
+    default = M.get_cmake_build_dir(),
+  }, function(input)
+    M.cmake_update_build_dir(input)
+  end)
+end
+
+function M.edit_source_dir()
+  vim.ui.input({
+    prompt = "Source Directory: ",
+    default = M.get_dco("source_dir"),
+  }, function(input)
+    M.cmake_update_source_dir(input)
+  end)
+end
+
 function M.edit_cmake_args()
   vim.ui.input({
     prompt = "CMake Arguments: ",
@@ -461,6 +479,10 @@ end
 
 function M.cmake_load()
   -- do nothing ... just enables my new build dir grep command to work
+end
+
+function M.get_build_tools()
+  return { "vsplit", "vim-dispatch", "Makeshift", "make", "job" }
 end
 
 function M.cmake_create_file(args)
@@ -512,6 +534,14 @@ function M.run_lit_on_file()
 end
 
 function M.setup(opts)
+  vim.g.cmake_last_window = nil
+  vim.g.cmake_last_buffer = nil
+
+  if not vim.g.vim_cmake_build_tool then
+    vim.g.vim_cmake_build_tool = 'vsplit'
+  end
+
+  M.initialize_cache_file()
 end
 
 return M

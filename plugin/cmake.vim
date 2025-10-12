@@ -8,9 +8,6 @@ else
   let g:loaded_vim_cmake = 1
 endif
 
-function s:get_name_relative_pairs()
-  return v:lua.require("cmake").state.dir_cache_object.name_relative_pairs
-endfunction
 
 function s:get_cmake_target_file()
   return v:lua.require("cmake").get_dco("current_target_file")
@@ -22,9 +19,6 @@ endfunction
 
 function s:get_cmake_build_dir()
   return v:lua.require("cmake").get_dco("build_dir")
-endfunction
-function s:set_cmake_build_dir(value)
-  call v:lua.require("cmake").set_dco("build_dir", a:value)
 endfunction
 
 function s:get_cmake_source_dir()
@@ -90,9 +84,7 @@ function g:cmake#ParseCodeModelJson()
   return 1
 endf
 
-call v:lua.require("cmake").initialize_cache_file()
-
-function s:make_query_files()
+function s:get_cmake_argument_string()
   let l:build_dir = s:get_cmake_build_dir()
   if !isdirectory(l:build_dir . '/.cmake/api/v1/query')
     call mkdir(l:build_dir . '/.cmake/api/v1/query', 'p')
@@ -100,19 +92,15 @@ function s:make_query_files()
   if !filereadable(l:build_dir . '/.cmake/api/v1/query/codemodel-v2')
     call writefile([' '], l:build_dir . '/.cmake/api/v1/query/codemodel-v2')
   endif
-endfunction
-
-function s:get_cmake_argument_string()
-  call s:make_query_files()
   let l:arguments = []
-  let l:arguments += s:get_cmake_arguments()
+  let l:arguments += v:lua.require("cmake").get_cmake_args()
   let l:arguments += ['-G ' . s:get_state("generator")]
   let l:arguments += ['-DCMAKE_EXPORT_COMPILE_COMMANDS=ON']
 
   let found_source_dir_arg = v:false
   let found_build_dir_arg = v:false
   let found_cmake_build_type = v:false
-  for arg in s:get_cmake_arguments()
+  for arg in v:lua.require("cmake").get_cmake_args()
     if (arg =~ "CMAKE_BUILD_TYPE")
       let found_cmake_build_type = v:true
     elseif (arg =~ "-S")
@@ -140,30 +128,6 @@ function s:get_cmake_argument_string()
   return l:command
 endfunction
 
-function g:CMake_configure_and_generate()
-  call s:cmake_configure_and_generate()
-endfunction
-
-function s:check_if_window_is_alive(win)
-  if index(nvim_list_wins(), a:win) > -1
-    return v:true
-  else
-    return v:false
-  endif
-endfunction
-
-function s:check_if_buffer_is_alive(buf)
-  if index(nvim_list_bufs(), a:buf) > -1
-    return v:true
-  else
-    return v:false
-  endif
-endfunction
-
-function s:cmake_configure_and_generate()
-  call g:cmake#ConfigureAndGenerateWithCompletion(s:noop)
-endfunction
-
 function g:cmake#ConfigureAndGenerateWithCompletion(completion)
   if !filereadable(s:get_cmake_source_dir() . "/CMakeLists.txt")
     if exists("g:cmake_template_file")
@@ -186,30 +150,6 @@ function s:noop_function(...)
 endfunction
 
 let s:noop = function('s:noop_function')
-
-let g:cmake_last_window = v:null
-let g:cmake_last_buffer = v:null
-
-if !exists('g:vim_cmake_build_tool')
-  let g:vim_cmake_build_tool = 'vsplit'
-endif
-
-function s:cmake_get_target_and_run_action(name_relative_pairs, action)
-  " echom "s:cmake_get_target_and_run_action([" . join(a:target_list, ",")  . "], " . a:action . ")"
-  let l:names = []
-  for target in a:name_relative_pairs
-    let l:name = target.name
-    call add(l:names, l:name)
-  endfor
-
-  if len(l:names) == 1
-    " this has to be unwrapped because a:action is a string
-    exec "call " . a:action . "(\"" . l:names[0] . "\")"
-  else
-    let &makeprg = s:get_state("build_command")
-    call fzf#run({'source': l:names, 'sink': function(a:action), 'down': len(l:names) + 2})
-  endif
-endfunction
 
 " TODO: Fix this breakpoint handling
 function s:start_gdb(job_id, exit_code, event)
@@ -413,7 +353,7 @@ endfunction
 
 function s:_do_debug_current_target()
   if s:get_cmake_target_file() == v:null
-    call s:cmake_get_target_and_run_action(s:get_execs_from_namae_relative_pairs(), 's:update_target')
+    call v:lua.require("cmake").cmake_get_target_and_run_action("THIS IS BROKEN", 's:update_target')
   endif
 
   if s:get_state("debugger") ==? 'gdb'
@@ -425,65 +365,34 @@ function s:_do_debug_current_target()
   endif
 endfunction
 
-function g:GetCMakeCurrentTargetRunArgs()
-  let c = s:get_cmake_single_target_cache()
-  return c.args
-endfunction
-
-function s:get_cmake_single_target_cache()
-  let c = v:lua.require("cmake").get_dco("targets")
-  return c[s:get_cmake_target_file()]
-endfunction
-
-function g:GetCMakeSourceDir()
-  return s:get_cmake_source_dir()
-endfunction
-
-function g:GetCMakeBuildDir()
-  return s:get_cmake_build_dir()
-endfunction
-
-function s:get_build_tools(...)
-  return ["vim-dispatch", "vsplit", "Makeshift", "make", "job"]
-endfunction
-
 command! -nargs=0 CMakeOpenCacheFile call v:lua.require("cmake").cmake_open_cache_file()
 
 command! -nargs=* -complete=shellcmd CMakeSetCMakeArgs call v:lua.require("cmake").cmake_set_cmake_args(<f-args>)
 command! -nargs=1 -complete=shellcmd CMakeSetBuildDir call v:lua.require("cmake").cmake_update_build_dir(<f-args>)
 command! -nargs=1 -complete=shellcmd CMakeSetSourceDir call v:lua.require("cmake").cmake_update_source_dir(<f-args>)
 
-command! -nargs=0  CMakeConfigureAndGenerate call s:cmake_configure_and_generate()
-
-command! -nargs=0 CMakeDebugWithNvimLLDB call s:cmake_debug_current_target_lldb()
-command! -nargs=0 CMakeDebugWithNvimGDB call s:cmake_debug_current_target_gdb()
-command! -nargs=0 CMakeDebugWithNvimDapLLDBVSCode call s:cmake_debug_current_target_nvim_dap_lldb_vscode()
-
 command! -nargs=0 CMakePickTarget call v:lua.require("cmake").cmake_pick_target()
 command! -nargs=0 CMakePickExecutableTarget call v:lua.require("cmake").cmake_pick_executable_target()
 command! -nargs=0 CMakeRunCurrentTarget call v:lua.require("cmake").cmake_run_current_target()
 command! -nargs=* -complete=shellcmd CMakeSetCurrentTargetRunArgs call v:lua.require("cmake").cmake_set_current_target_run_args(<q-args>)
-command! -nargs=? -complete=customlist,s:get_build_tools CMakeBuildCurrentTarget call v:lua.require("cmake").cmake_build_current_target(<f-args>)
+command! -nargs=? -complete=customlist,v:lua.require("cmake").get_build_tools CMakeBuildCurrentTarget call v:lua.require("cmake").cmake_build_current_target(<f-args>)
 
 command! -nargs=1 -complete=shellcmd CMakeClean call v:lua.require("cmake").cmake_clean()
 command! -nargs=0 CMakeBuildAll call v:lua.require("cmake").cmake_build_all()
+
+command! -nargs=* -complete=shellcmd CMakeCreateFile call v:lua.require("cmake").cmake_create_file(<f-args>)
+command! -nargs=1 -complete=shellcmd CMakeCloseWindow call v:lua.require("cmake").cmake_close_windows()
+command! -nargs=0 CMakeRunLitOnFile call v:lua.require("cmake").run_lit_on_file()
+command! -nargs=0 CMakeLoad call v:lua.require("cmake").cmake_load()
+
+command! CMakeEditCMakeArgs call v:lua.require("cmake").edit_cmake_args()
 
 command! -nargs=0 CMakeToggleFileLineColumnBreakpoint call s:toggle_file_line_column_breakpoint()
 command! -nargs=0 CMakeToggleFileLineBreakpoint call s:toggle_file_line_breakpoint()
 command! -nargs=0 CMakeListBreakpoints call g:CMake_list_breakpoints()
 command! -nargs=0 CMakeToggleBreakAtMain call s:toggle_break_at_main()
-
-command! -nargs=* -complete=shellcmd CMakeCreateFile call v:lua.require("cmake").cmake_create_file(<f-args>)
-
-command! -nargs=1 -complete=shellcmd CMakeCloseWindow call v:lua.require("cmake").cmake_close_windows()
-
-command! -nargs=0 CMakeRunLitOnFile call v:lua.require("cmake").run_lit_on_file()
-
-command! -nargs=0 CMakeLoad call v:lua.require("cmake").cmake_load()
-
-command! CMakeEditCurrentTargetRunArgs call feedkeys(":CMakeSetCurrentTargetRunArgs " . eval("g:GetCMakeCurrentTargetRunArgs()"))
-command! CMakeEditCMakeArgs call v:lua.require("cmake").edit_cmake_args()
-command! CMakeEditBuildDir call feedkeys(":CMakeSetBuildDir " . eval("g:GetCMakeBuildDir()"))
-command! CMakeEditSourceDir call feedkeys(":CMakeSetSourceDir " . eval("g:GetCMakeSourceDir()"))
-
+command! -nargs=0  CMakeConfigureAndGenerate call g:cmake#ConfigureAndGenerateWithCompletion(s:noop)
+command! -nargs=0 CMakeDebugWithNvimLLDB call s:cmake_debug_current_target_lldb()
+command! -nargs=0 CMakeDebugWithNvimGDB call s:cmake_debug_current_target_gdb()
+command! -nargs=0 CMakeDebugWithNvimDapLLDBVSCode call s:cmake_debug_current_target_nvim_dap_lldb_vscode()
 
