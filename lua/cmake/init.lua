@@ -400,7 +400,69 @@ function M.start_lldb(job_id, exit_code, event)
   local lldb_init_arg = " -s " .. init_file
 
   vim.cmd("GdbStartLLDB lldb " ..
-  M.get_cmake_target_file() .. lldb_init_arg .. " " .. " -- " .. M.get_cmake_target_args())
+    M.get_cmake_target_file() .. lldb_init_arg .. " " .. " -- " .. M.get_cmake_target_args())
+end
+
+function M.start_gdb(job_id, exit_code, event)
+  if exit_code ~= 0 then
+    return
+  end
+
+  local commands = {}
+
+  if M.should_break_at_main() then
+    table.insert(commands, "breakpoint set --name main")
+  end
+
+  local breakpoints = M.get_breakpoints()
+  for _, breakpoint in pairs(breakpoints) do
+    if breakpoint.enabled then
+      table.insert(commands, "b " .. breakpoint.text)
+    end
+  end
+
+  table.insert(commands, "run")
+
+  local init_file = "/tmp/gdb_init_vim_cmake"
+  local _ = vim.fn.writefile(commands, init_file)
+
+  M.close_last_window_if_open()
+  M.close_last_buffer_if_open()
+
+  local gdb_init_arg = " -s " .. init_file
+
+  vim.cmd("GdbStartLLDB gdb -q " ..
+    gdb_init_arg .. " --args " .. M.get_cmake_target_file() .. " " .. M.get_cmake_target_args())
+end
+
+function M.start_nvim_dap_lldb_vscode(job_id, exit_code, event)
+  if exit_code ~= 0 then
+    return
+  end
+
+  local commands = {}
+
+  table.insert(commands, "breakpoint set --name main")
+
+  local breakpoints = M.get_breakpoints()
+  for _, breakpoint in pairs(breakpoints) do
+    if breakpoint.enabled then
+      table.insert(commands, "b " .. breakpoint.text)
+    end
+  end
+
+  -- table.insert(commands, "run")
+
+  local init_file = "/tmp/lldb_init_vim_cmake"
+  local _ = vim.fn.writefile(commands, init_file)
+
+  M.close_last_window_if_open()
+  M.close_last_buffer_if_open()
+
+  local command = "DebugLldb " ..
+  M.get_cmake_target_file() .. " --lldbinit " .. init_file .. " -- " .. M.get_cmake_target_args()
+  inspect(command)
+  vim.cmd(command)
 end
 
 function M._do_debug_current_target()
@@ -811,7 +873,7 @@ vim.api.nvim_create_user_command("CMakeRunCurrentTarget", M.cmake_run_current_ta
 vim.api.nvim_create_user_command("CMakeSetCurrentTargetRunArgs",
   function(args) M.cmake_set_current_target_run_args(args.args) end, { nargs = "*", })
 vim.api.nvim_create_user_command("CMakeBuildCurrentTarget", function(args) M.cmake_build_current_target(args.args) end,
-  { nargs = "?" })                                                                                                                       -- { nargs = "?", complete = M.get_build_tools })
+  { nargs = "?" }) -- { nargs = "?", complete = M.get_build_tools })
 
 vim.api.nvim_create_user_command("CMakeClean", M.cmake_clean, { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeBuildAll", M.cmake_build_all, { nargs = 0, })
