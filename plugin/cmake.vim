@@ -8,45 +8,23 @@ else
   let g:loaded_vim_cmake = 1
 endif
 
-function s:set_if_empty(object, key, val)
-  if !has_key(a:object, a:key)
-    let a:object[a:key] = a:val
-  endif
-  return a:object[a:key]
-endfunction
-
 function s:get_name_relative_pairs()
-  return s:get_cmake_dir_cache_object().name_relative_pairs
-endfunction
-
-let g:state = {
-    \ "cmake_tool": "cmake",
-    \ "cache_file_path": $HOME . '/.vim_cmake.json',
-    \ "generator": 'Ninja',
-    \ "build_command": "ninja_distcc",
-    \ "template_file": expand(":p:h:h" . "/CMakeLists.txt"),
-    \ "cache_object": v:null,
-    \ "dir_cache_object": v:null,
-    \ }
-
-function s:get_cmake_dir_cache_object()
-  return g:state.dir_cache_object
+  return v:lua.require("cmake").state.dir_cache_object.name_relative_pairs
 endfunction
 
 function s:get_cmake_target_file()
-  return s:get_cmake_dir_cache_object().current_target_file
+  return v:lua.require("cmake").get_dco("current_target_file")
 endfunction
 function s:set_cmake_target_file(value)
-  let l:dco = s:get_cmake_dir_cache_object()
-  let l:dco.current_target_file = a:value
-  let g:state.current_target_cache_object = s:get_cmake_dir_cache_object().targets[a:value]
+  call v:lua.require("cmake").set_dco("current_target_file", a:value)
+  call v:lua.require("cmake").bind_ctco()
 endfunction
 
 function s:add_cmake_target_to_target_list(target_name)
   let l:file = s:get_cmake_build_dir() . '/' . g:tar_to_relative[a:target_name]
   let l:relative = g:tar_to_relative[a:target_name]
 
-  call s:set_if_empty(s:get_cmake_dir_cache_object().targets, l:file, {
+  call v:lua.require("cmake").add_dco_target_if_new(l:file, {
       \ "current_target_file" : l:file,
       \ "current_target_relative" : l:relative,
       \ "current_target_name" : a:target_name,
@@ -56,63 +34,63 @@ function s:add_cmake_target_to_target_list(target_name)
 endfunction
 
 function s:get_cmake_target_relative()
-  return g:state.current_a.current_target_relative.current_target_relative
+  return v:lua.require("cmake").state.current_a.current_target_relative.current_target_relative
 endfunction
 function s:set_cmake_target_relative(value)
-  let g:state.current_target_cache_object.current_target_relative = a:value
+  call v:lua.require("cmake").set_state_child("current_target_cache_object", "current_target_relative", a:value)
 endfunction
 
 function s:get_cmake_target_name()
-  return g:state.current_target_cache_object.current_target_name
+  return v:lua.require("cmake").get_ctco("current_target_name")
 endfunction
 function s:set_cmake_target_name(value)
-  let g:state.current_target_cache_object.current_target_name = a:value
+  call v:lua.require("cmake").set_stco("current_target_name", a:value)
 endfunction
 
 function s:set_cmake_target_args(value)
-  let g:state.current_target_cache_object.args = a:value
+  call v:lua.require("cmake").set_ctco("args", a:value)
 endfunction
 function s:get_cmake_target_args()
-  return g:state.current_target_cache_object.args
+  return v:lua.require("cmake").get_ctco("args")
 endfunction
 
 function s:set_cmake_target_breakpoints(value)
-  let g:state.current_target_cache_object.breakpoints = a:value
+  call v:lua.require("cmake").set_state("current_target_cache_object", "breakpoints", a:value)
 endfunction
 function s:get_cmake_target_breakpoints()
-  return g:state.current_target_cache_object.breakpoints
+  return v:lua.require("cmake").get_ctco("breakpoints")
 endfunction
 
 function s:set_cmake_arguments(value)
-  let g:state.dir_cache_object.cmake_arguments = a:value
+  call v:lua.require("cmake").set_dco("cmake_arguments", a:value)
 endfunction
 function s:get_cmake_arguments()
-  return g:state.dir_cache_object.cmake_arguments
+  return v:lua.require("cmake").get_dco("cmake_arguments")
 endfunction
 
 function s:get_cmake_build_dir()
-  return g:state.dir_cache_object.build_dir
+  return v:lua.require("cmake").get_dco("build_dir")
 endfunction
 function s:set_cmake_build_dir(value)
-  let g:state.dir_cache_object.build_dir = a:value
+  call v:lua.require("cmake").set_dco("build_dir", a:value)
 endfunction
 
 function s:get_cmake_source_dir()
-  return g:state.dir_cache_object.source_dir
+  return v:lua.require("cmake")get_dco("source_dir")
 endfunction
 function s:set_cmake_source_dir(value)
-  let g:state.dir_cache_object.source_dir = a:value
+  call v:lua.require("cmake").set_dco("source_dir", a:value)
 endfunction
 
 function s:get_cmake_cache_file()
-  return g:state.cache_object
+  return v:lua.require("cmake").state.cache_object
 endfunction
 function s:set_cmake_cache_file(value)
-  let g:state.cache_object = a:value
+  call v:lua.require("cmake").set_state("cache_object", a:value)
 endfunction
 
-function s:get_state()
-  return g:state
+function s:get_state(key)
+  return v:lua.require("cmake").get_state(a:key)
 endfunction
 
 " this needs to be wrapped due to the need to use on_exit to pipeline the config
@@ -133,8 +111,7 @@ function s:_do_parse_codemodel_json()
   let l:first_config = l:configurations[0]
   let l:targets_dicts = l:first_config['targets']
 
-
-  let g:state.dir_cache_object.name_relative_pairs = []
+  call v:lua.require("cmake").set_dco("name_relative_pairs", [])
 
   let g:tar_to_relative = {}
 
@@ -150,20 +127,18 @@ function s:_do_parse_codemodel_json()
       let l:path = l:artifact['path']
       let l:type = l:target_file_data['type']
       let l:is_exec = l:type ==? "Executable"
-      call add(s:get_name_relative_pairs(), {
-            \ "name": l:name,
-            \ "relative" : l:path,
-            \ "is_exec": l:is_exec,
-            \ "is_artifact": v:true
-            \ })
+      call v:lua.require("cmake").add_name_relative_pair( 
+            \ l:name,
+            \ l:path,
+            \ l:is_exec,
+            \ v:true)
       let g:tar_to_relative[l:name] = l:path
     else
       let l:type = l:target_file_data['type']
-      call add(s:get_name_relative_pairs() , {
-            \ "name": l:name,
-            \ "is_exec": v:false,
-            \ "is_artifact": v:false,
-            \ })
+      call v:lua.require("cmake").add_name_relative_pair(
+            \ l:name,
+            \ v:false,
+            \ v:false)
     endif
   endfor
   return 1
@@ -194,25 +169,25 @@ endfunction
 function s:initialize_cache_file()
   " initialize some variables
   if exists("g:cmake_template_file")
-    let g:state.template_file = g:cmake_template_file
+    call v:lua.require("cmake").set_state("template_file", g:cmake_template_file)
   end
   if exists("g:cmake_default_build_dir")
-    let g:state.default_build_dir = g:cmake_default_build_dir
+    call v:lua.require("cmake").set_state("default_build_dir", g:cmake_default_build_dir)
   else
-    let g:state.default_build_dir = "build"
+    call v:lua.require("cmake").set_state("default_build_dir", "build")
   end
   if exists("g:cmake_extra_lit_args")
-    let g:state.extra_lit_args = g:cmake_extra_lit_args
+    call v:lua.require("cmake").set_state("extra_lit_args", g:cmake_extra_lit_args)
   else
-    let g:state.extra_lit_args = "-a"
+    call v:lua.require("cmake").set_state("extra_lit_args", "-a")
   endif
   if exists("g:vim_cmake_debugger")
-    let g:state.debugger = g:vim_cmake_debugger
+    call v:lua.require("cmake").set_state("debugger", g:vim_cmake_debugger)
   endif
 
   " load cache file from disk
-  if filereadable(g:state.cache_file_path)
-    let l:contents = readfile(g:state.cache_file_path)
+  if filereadable(v:lua.require("cmake").state.cache_file_path)
+    let l:contents = readfile(v:lua.require("cmake").state.cache_file_path)
     let l:json_string = join(l:contents, "\n")
 
     call s:set_cmake_cache_file(json_decode(l:json_string))
@@ -221,31 +196,22 @@ function s:initialize_cache_file()
   endif
 
   " load directory cache object
-  if !has_key(g:state.cache_object, getcwd())
-    let g:state.cache_object[getcwd()] = {}
+  if !has_key(v:lua.require("cmake").state.cache_object, getcwd())
+    call v:lua.require("cmake").set_state_child("cache_object", getcwd(), {})
   endif
-  let g:state.dir_cache_object = g:state.cache_object[getcwd()]
+  call v:lua.require("cmake").bind_dco()
 
   " initialize directory cache object
-  let l:dco = g:state.dir_cache_object
-  call s:set_if_empty(l:dco, "cmake_arguments", [])
-  call s:set_if_empty(l:dco, "build_dir", g:state.default_build_dir)
-  call s:set_if_empty(l:dco, "source_dir", ".")
-  call s:set_if_empty(l:dco, "targets", {})
-  call s:set_if_empty(l:dco, "name_relative_pairs", [])
+  call v:lua.require("cmake").set_dco_if_empty("cmake_arguments", [])
+  call v:lua.require("cmake").set_dco_if_empty("build_dir", v:lua.require("cmake").state.default_build_dir)
+  call v:lua.require("cmake").set_dco_if_empty("source_dir", ".")
+  call v:lua.require("cmake").set_dco_if_empty("targets", {})
+  call v:lua.require("cmake").set_dco_if_empty("name_relative_pairs", [])
 
   " initialize current target cache object
-  call s:set_if_empty(l:dco, "current_target_file", v:null)
+  call v:lua.require("cmake").set_dco_if_empty("current_target_file", v:null)
 
-  if l:dco.current_target_file != v:null
-    let g:state.current_target_cache_object = l:dco.targets[l:dco.current_target_file]
-  else
-    let g:state.current_target_cache_object = v:null
-  endif
-endfunction
-
-function g:CMake_get_cache_file()
-  return s:get_cmake_cache_file()
+  call v:lua.require("cmake").bind_ctco()
 endfunction
 
 call s:initialize_cache_file()
@@ -273,7 +239,7 @@ function s:get_cmake_argument_string()
   call s:make_query_files()
   let l:arguments = []
   let l:arguments += s:get_cmake_arguments()
-  let l:arguments += ['-G ' . s:get_state().generator]
+  let l:arguments += ['-G ' . s:get_state("generator")]
   let l:arguments += ['-DCMAKE_EXPORT_COMPILE_COMMANDS=ON']
 
   let found_source_dir_arg = v:false
@@ -351,7 +317,7 @@ function s:cmake_configure_and_generate_with_completion(completion)
       return
     endif
   endif
-  let l:command = s:get_state().cmake_tool . " " . s:get_cmake_argument_string()
+  let l:command = s:get_state("cmake_tool") . " " . s:get_cmake_argument_string()
   echo l:command
   call s:get_only_window()
   call termopen(split(l:command), {'on_exit': a:completion})
@@ -438,20 +404,20 @@ function s:_build_target_with_completion(target, completion)
     call s:get_only_window()
     call termopen(l:command, { "on_exit": a:completion })
   elseif g:vim_cmake_build_tool ==? 'vim-dispatch'
-    let &makeprg = s:get_state().build_command . ' -C ' . l:directory . ' ' . a:target
+    let &makeprg = s:get_state("build_command") . ' -C ' . l:directory . ' ' . a:target
     " completion not honored
     Make
   elseif g:vim_cmake_build_tool ==? 'Makeshift'
-    let &makeprg = s:get_state.build_command . ' ' . a:target
+    let &makeprg = s:get_state("build_command") . ' ' . a:target
     let b:makeshift_root = l:directory
     " completion not honored
     MakeshiftBuild
   elseif g:vim_cmake_build_tool ==? 'make'
-    let &makeprg = s:get_state().build_command . ' -C ' . l:directory . ' ' . a:target
+    let &makeprg = s:get_state("build_command") . ' -C ' . l:directory . ' ' . a:target
     " completion not honored
     make
   elseif g:vim_cmake_build_tool ==? 'job'
-    let l:cmd = s:get_state().build_command . ' -C ' . l:directory . ' ' . a:target
+    let l:cmd = s:get_state("build_command") . ' -C ' . l:directory . ' ' . a:target
     call jobstart(cmd, {"on_exit": a:completion })
   else
     echo 'Your g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.'
@@ -477,32 +443,25 @@ function s:_build_all_with_completion(completion)
     call s:get_only_window()
     call termopen(l:command, { "on_exit": a:completion })
   elseif g:vim_cmake_build_tool ==? 'Makeshift'
-    let &makeprg = s:get_state().build_command
+    let &makeprg = s:get_state("build_command")
     let cwd = getcwd()
     let b:makeshift_root = cwd . '/' . s:get_cmake_build_dir()
     " completion not honored
     MakeshiftBuild
   elseif g:vim_cmake_build_tool ==? 'vim-dispatch'
     let cwd = getcwd()
-    let &makeprg = s:get_state().build_command . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
+    let &makeprg = s:get_state("build_command") . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
     " completion not honored
     Make
   elseif g:vim_cmake_build_tool ==? 'make'
     let cwd = getcwd()
-    let &makeprg = s:get_state().build_command . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
+    let &makeprg = s:get_state("build_command") . ' -C ' . cwd . '/' . s:get_cmake_build_dir()
     " completion not honored
     make
   else
     echo 'Your g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.'
   endif
 
-endfunction
-
-function s:write_cache_file()
-  let cache = s:get_cmake_cache_file()
-  let serial = encode_json(cache)
-  let split = split(serial, '\n')
-  call writefile(split, $HOME . '/.vim_cmake.json')
 endfunction
 
 function s:cmake_pick_target()
@@ -586,7 +545,7 @@ function s:select_target(target_name)
   let l:file = s:get_cmake_build_dir() . '/' . g:tar_to_relative[a:target_name]
   call s:set_cmake_target_file(l:file)
 
-  call s:write_cache_file()
+  " call v:lua.require("cmake").write_cache_file()
 endfunction
 
 function s:dump_current_target()
@@ -617,7 +576,7 @@ function s:cmake_get_target_and_run_action(name_relative_pairs, action)
     " this has to be unwrapped because a:action is a string
     exec "call " . a:action . "(\"" . l:names[0] . "\")"
   else
-    let &makeprg = s:get_state().build_command
+    let &makeprg = s:get_state("build_command")
     call fzf#run({'source': l:names, 'sink': function(a:action), 'down': len(l:names) + 2})
   endif
 endfunction
@@ -762,7 +721,7 @@ function s:toggle_breakpoint(break_string)
         \ "enabled": v:true
         \ }
   endif
-  call s:write_cache_file()
+  call v:lua.require("cmake").write_cache_file()
 endfunction
 
 " TODO: Fix this breakpoint handling
@@ -803,20 +762,18 @@ function s:start_nvim_dap_lldb_vscode(job_id, exit_code, event)
 endfunction
 
 function s:cmake_debug_current_target_nvim_dap_lldb_vscode()
-  let l:state = s:get_state()
-  let l:state.debugger = 'nvim_dap_lldb_vscode'
+  echom "in dap function"
+  call v:lua.require("cmake").set_state("debugger", "nvim_dap_lldb_vscode")
   call s:cmake_debug_current_target()
 endf
 
 function s:cmake_debug_current_target_lldb()
-  let l:state = s:get_state()
-  let l:state.debugger = 'lldb'
+  call v:lua.require("cmake").set_state("debugger", "lldb")
   call s:cmake_debug_current_target()
 endf
 
 function s:cmake_debug_current_target_gdb()
-  let l:state = s:get_state()
-  let l:state.debugger = 'gdb'
+  call v:lua.require("cmake").set_state("debugger", "gdb")
   call s:cmake_debug_current_target()
 endf
 
@@ -829,9 +786,9 @@ function s:_do_debug_current_target()
     call s:cmake_get_target_and_run_action(s:get_execs_from_namae_relative_pairs(), 's:update_target')
   endif
 
-  if s:get_state().debugger ==? 'gdb'
+  if s:get_state("debugger") ==? 'gdb'
     call s:cmake_build_current_target_with_completion(function('s:start_gdb'))
-  elseif s:get_state().debugger ==? 'lldb'
+  elseif s:get_state("debugger") ==? 'lldb'
     call s:cmake_build_current_target_with_completion(function('s:start_lldb'))
   else
     call s:cmake_build_current_target_with_completion(function('s:start_nvim_dap_lldb_vscode'))
@@ -841,7 +798,7 @@ endfunction
 function s:cmake_set_cmake_args(...)
   let l:arguments = a:000
   call s:set_cmake_arguments(l:arguments)
-  call s:write_cache_file()
+  call v:lua.require("cmake").write_cache_file()
 endfunction
 
 function g:GetCMakeArgs()
@@ -854,19 +811,17 @@ function s:cmake_set_current_target_run_args(args)
     return
   endif
   call s:set_cmake_target_args(a:args)
-  call s:write_cache_file()
+  call v:lua.require("cmake").write_cache_file()
   call s:dump_current_target()
 endfunction
 
 function g:GetCMakeCurrentTargetRunArgs()
   let c = s:get_cmake_single_target_cache()
-  call s:set_if_empty(c, "args", "")
   return c.args
 endfunction
 
 function s:get_cmake_single_target_cache()
-  let c = v:lua.require("cmake").get_cmake_targets_object()
-  call s:set_if_empty(c, s:get_cmake_target_file(), {})
+  let c = v:lua.require("cmake").get_dco("targets")
   return c[s:get_cmake_target_file()]
 endfunction
 
@@ -892,13 +847,13 @@ endfunction
 function s:cmake_update_build_dir(...)
   let dir = a:1
   call s:set_cmake_build_dir(dir)
-  call s:write_cache_file()
+  call v:lua.require("cmake").write_cache_file()
 endfunction
 
 function s:cmake_update_source_dir(...)
   let dir = a:1
   call s:set_cmake_source_dir(dir)
-  call s:write_cache_file()
+  call v:lua.require("cmake").write_cache_file()
 endfunction
 
 function g:GetCMakeSourceDir()
@@ -925,7 +880,7 @@ function s:run_lit_on_file()
     let l:lit_path = "llvm-lit"
   endif
   call s:get_only_window()
-  call termopen([l:lit_path, s:get_state().extra_lit_args, l:full_path])
+  call termopen([l:lit_path, s:get_state("extralit_args"), l:full_path])
 endfunction
 
 function s:cmake_load()
