@@ -283,6 +283,10 @@ function M.cmake_run_current_target()
   M.parse_codemodel_json_with_completion(M._do_run_current_target)
 end
 
+function M.cmake_pick_executable_target()
+  M.parse_codemodel_json_with_completion(M._do_cmake_pick_executable_target)
+end
+
 function M.parse_codemodel_json_with_completion(completion)
   local build_dir = M.get_cmake_build_dir()
   if not vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/reply") then
@@ -302,6 +306,16 @@ end
 
 function M.cmake_build_all()
   M.cmake_build_all_with_completion(function() end)
+end
+
+function M.get_execs_from_name_relative_pairs()
+  -- let l:filtered = filter(s:get_name_relative_pairs(), "v:val.is_exec")
+  print("NYI")
+end
+
+function M.cmake_close_windows()
+  M.close_last_window_if_open()
+  M.close_last_buffer_if_open()
 end
 
 function M._do_cmake_pick_executable_target(pairs)

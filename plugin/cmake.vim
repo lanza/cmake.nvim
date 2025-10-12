@@ -220,23 +220,6 @@ function s:cmake_clean()
   exe "vs | exe \"normal \<c-w>L\" | terminal " . l:command
 endfunction
 
-function s:cmake_pick_executable_target()
-  call v:lua.require("cmake").parse_codemodel_json_with_completion(function('s:_do_cmake_pick_executable_target'))
-endf
-
-function s:get_execs_from_name_relative_pairs()
-  let l:filtered = filter(s:get_name_relative_pairs(), "v:val.is_exec")
-endfunction
-
-function s:_do_cmake_pick_executable_target()
-  call v:lua.require("cmake")._do_cmake_pick_executable_target(s:get_execs_from_name_relative_pairs())
-endfunction
-
-function s:cmake_close_windows()
-  call s:close_last_window_if_open()
-  call s:close_last_buffer_if_open()
-endf
-
 function s:close_last_window_if_open()
   if s:check_if_window_is_alive(g:cmake_last_window)
     call nvim_win_close(g:cmake_last_window, v:true)
@@ -587,7 +570,7 @@ command! -nargs=0 CMakeDebugWithNvimGDB call s:cmake_debug_current_target_gdb()
 command! -nargs=0 CMakeDebugWithNvimDapLLDBVSCode call s:cmake_debug_current_target_nvim_dap_lldb_vscode()
 
 command! -nargs=0 CMakePickTarget call v:lua.require("cmake").cmake_pick_target()
-command! -nargs=0 CMakePickExecutableTarget call s:cmake_pick_executable_target()
+command! -nargs=0 CMakePickExecutableTarget call v:lua.require("cmake").cmake_pick_executable_target()
 command! -nargs=0 CMakeRunCurrentTarget call v:lua.require("cmake").cmake_run_current_target()
 command! -nargs=* -complete=shellcmd CMakeSetCurrentTargetRunArgs call v:lua.require("cmake").cmake_set_current_target_run_args(<q-args>)
 command! -nargs=? -complete=customlist,s:get_build_tools CMakeBuildCurrentTarget call v:lua.require("cmake").cmake_build_current_target(<f-args>)
@@ -602,7 +585,7 @@ command! -nargs=0 CMakeToggleBreakAtMain call s:toggle_break_at_main()
 
 command! -nargs=* -complete=shellcmd CMakeCreateFile call s:cmake_create_file(<f-args>)
 
-command! -nargs=1 -complete=shellcmd CMakeCloseWindow call s:cmake_close_windows()
+command! -nargs=1 -complete=shellcmd CMakeCloseWindow call v:lua.require("cmake").cmake_close_windows()
 
 command! -nargs=0 CMakeRunLitOnFile call s:run_lit_on_file()
 
