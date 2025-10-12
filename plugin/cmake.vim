@@ -49,10 +49,6 @@ function s:set_if_empty(object, key, val)
   return a:object[a:key]
 endfunction
 
-function s:get_cmake_targets_object()
-  return g:state.dir_cache_object.targets
-endfunctio
-
 function s:get_name_relative_pairs()
   return s:get_cmake_dir_cache_object().name_relative_pairs
 endfunction
@@ -903,7 +899,7 @@ function g:GetCMakeCurrentTargetRunArgs()
 endfunction
 
 function s:get_cmake_single_target_cache()
-  let c = s:get_cmake_targets_object()
+  let c = v:lua.require("cmake").get_cmake_targets_object()
   call s:set_if_empty(c, s:get_cmake_target_file(), {})
   return c[s:get_cmake_target_file()]
 endfunction
