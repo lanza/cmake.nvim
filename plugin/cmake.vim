@@ -15,37 +15,9 @@ endfunction
 function s:get_cmake_target_file()
   return v:lua.require("cmake").get_dco("current_target_file")
 endfunction
-function s:set_cmake_target_file(value)
-  call v:lua.require("cmake").set_dco("current_target_file", a:value)
-  call v:lua.require("cmake").bind_ctco()
-endfunction
 
-function s:get_cmake_target_relative()
-  return v:lua.require("cmake").state.current_a.current_target_relative.current_target_relative
-endfunction
-function s:set_cmake_target_relative(value)
-  call v:lua.require("cmake").set_state_child("current_target_cache_object", "current_target_relative", a:value)
-endfunction
-
-function s:get_cmake_target_name()
-  return v:lua.require("cmake").get_ctco("current_target_name")
-endfunction
-function s:set_cmake_target_name(value)
-  call v:lua.require("cmake").set_stco("current_target_name", a:value)
-endfunction
-
-function s:set_cmake_target_args(value)
-  call v:lua.require("cmake").set_ctco("args", a:value)
-endfunction
 function s:get_cmake_target_args()
   return v:lua.require("cmake").get_ctco("args")
-endfunction
-
-function s:set_cmake_target_breakpoints(value)
-  call v:lua.require("cmake").set_state("current_target_cache_object", "breakpoints", a:value)
-endfunction
-function s:get_cmake_target_breakpoints()
-  return v:lua.require("cmake").get_ctco("breakpoints")
 endfunction
 
 function s:set_cmake_arguments(value)
@@ -71,9 +43,6 @@ endfunction
 
 function s:get_cmake_cache_file()
   return v:lua.require("cmake").state.cache_object
-endfunction
-function s:set_cmake_cache_file(value)
-  call v:lua.require("cmake").set_state("cache_object", a:value)
 endfunction
 
 function s:get_state(key)
@@ -131,18 +100,6 @@ function g:cmake#ParseCodeModelJson()
   return 1
 endf
 
-function s:do_all_completions(...)
-  for Completion in a:000
-    if type(Completion) == v:t_func
-      call Completion()
-    endif
-  endfor
-endfunction
-
-function s:compose_completions(outer, inner)
-  call a:outer(a:inner)
-endfunction
-
 call v:lua.require("cmake").initialize_cache_file()
 
 function s:make_query_files()
@@ -152,15 +109,6 @@ function s:make_query_files()
   endif
   if !filereadable(l:build_dir . '/.cmake/api/v1/query/codemodel-v2')
     call writefile([' '], l:build_dir . '/.cmake/api/v1/query/codemodel-v2')
-  endif
-endfunction
-
-function s:assure_query_reply_with_completion(completion)
-  let l:build_dir = s:get_cmake_build_dir()
-  if !isdirectory(l:build_dir . '/.cmake/api/v1/reply')
-    call g:cmake#ConfigureAndGenerateWithCompletion(a:completion)
-  else
-    call a:completion()
   endif
 endfunction
 
@@ -255,96 +203,13 @@ function g:cmake#ConfigureAndGenerateWithCompletion(completion)
   " exe 'silent !test -L ' . l:link_cc_path . ' || test -e ' . l:link_cc_path . ' || ln -s ' . l:build_cc_path . .'
 endfunction
 
-
-function s:cmake_build_current_target(...)
-  if a:0 > 1
-    echom "CMakeBuildCurrentTarget takes one argument -- the dispatcher for the build"
-  end
-  let l:previous = g:vim_cmake_build_tool
-  if a:0 == 1
-    let g:vim_cmake_build_tool = a:1
-  endif
-  call s:cmake_build_current_target_with_completion(s:noop)
-  let g:vim_cmake_build_tool = l:previous
-endfunction
-
-function s:_do_build_current_target()
-  call s:_do_build_current_target_with_completion(s:noop)
-endfunction
-
 function s:noop_function(...)
 endfunction
 
 let s:noop = function('s:noop_function')
-let g:NOOP = function('s:noop_function')
-
-function s:_update_target_and_build(target)
-  call v:lua:require("cmake").select_target(target)
-  call s:_do_build_current_target()
-endfunction
-
-
-function s:_do_build_current_target_with_completion(completion)
-  if s:get_cmake_target_file() == v:null
-    call s:cmake_get_target_and_run_action(s:get_name_relative_pairs(), 's:_update_target_and_build')
-    return
-  endif
-
-  call s:_build_target_with_completion(s:get_cmake_target_name(), a:completion)
-endfunction
-
-function s:cmake_build_current_target_with_completion(completion)
-  call v:lua.require("cmake").parse_codemodel_json_with_completion(function("s:compose_completions", [function('s:_do_build_current_target_with_completion'), a:completion]))
-endfunction
-
-func s:is_absolute_path(path)
-  let l:is_absolute = execute("lua print(vim.startswith('" . a:path . "', '/'))")
-  if l:is_absolute =~ "true"
-    return 1
-  else
-    return 0
-  endif
-endfunction
-
-function s:_build_target(target)
-  call s:_build_target_with_completion(a:target, v:null)
-endfunction
 
 let g:cmake_last_window = v:null
 let g:cmake_last_buffer = v:null
-
-function s:_build_target_with_completion(target, completion)
-  if s:is_absolute_path(s:get_cmake_build_dir())
-    let l:directory = s:get_cmake_build_dir()
-  else
-    let l:cwd = getcwd()
-    let l:directory = cwd . '/' . s:get_cmake_build_dir()
-  endif
-
-  if g:vim_cmake_build_tool ==? 'vsplit'
-    let l:command = 'cmake --build ' . s:get_cmake_build_dir() . ' --target ' . a:target
-    call s:get_only_window()
-    call termopen(l:command, { "on_exit": a:completion })
-  elseif g:vim_cmake_build_tool ==? 'vim-dispatch'
-    let &makeprg = s:get_state("build_command") . ' -C ' . l:directory . ' ' . a:target
-    " completion not honored
-    Make
-  elseif g:vim_cmake_build_tool ==? 'Makeshift'
-    let &makeprg = s:get_state("build_command") . ' ' . a:target
-    let b:makeshift_root = l:directory
-    " completion not honored
-    MakeshiftBuild
-  elseif g:vim_cmake_build_tool ==? 'make'
-    let &makeprg = s:get_state("build_command") . ' -C ' . l:directory . ' ' . a:target
-    " completion not honored
-    make
-  elseif g:vim_cmake_build_tool ==? 'job'
-    let l:cmd = s:get_state("build_command") . ' -C ' . l:directory . ' ' . a:target
-    call jobstart(cmd, {"on_exit": a:completion })
-  else
-    echo 'Your g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.'
-  endif
-endfunction
 
 if !exists('g:vim_cmake_build_tool')
   let g:vim_cmake_build_tool = 'vsplit'
@@ -383,46 +248,6 @@ function s:close_last_buffer_if_open()
     call nvim_buf_delete(g:cmake_last_buffer, {"force": v:true})
   endif
 endf
-
-function s:_run_current_target(job_id, exit_code, event)
-  call s:close_last_window_if_open()
-  if a:exit_code == 0
-    call s:get_only_window()
-    exe "terminal \"" . s:get_cmake_target_file() . "\" " . s:get_cmake_target_args()
-  endif
-  let g:vim_cmake_build_tool = g:vim_cmake_build_tool_old
-endf
-
-function s:_update_target_and_run(target)
-  " echom "_update_target_and_run(" . a:target . ")"
-  call v:lua.require("cmake").select_target(a:target)
-  call s:_do_run_current_target()
-endfunction
-
-function s:_do_run_current_target()
-  " echom "_do_run_current_target() with s:get_cmake_target_file() = " . s:get_cmake_target_file()
-  if s:get_cmake_target_file() == '' || s:get_cmake_target_file() == v:null
-    " because vimscript doesn't have asynch the below just recursively calls this
-    call s:cmake_get_target_and_run_action(s:get_execs_from_name_relative_pairs(), 's:_update_target_and_run')
-    return
-  endif
-  if g:vim_cmake_build_tool != "vsplit"
-    let g:vim_cmake_build_tool_old = g:vim_cmake_build_tool
-    let g:vim_cmake_build_tool = "vsplit"
-  else
-    let g:vim_cmake_build_tool_old = g:vim_cmake_build_tool
-  endif
-  call s:cmake_build_current_target_with_completion(function("s:_run_current_target"))
-endfunction
-
-function s:cmake_run_current_target()
-  " echom "s:cmake_run_current_target()"
-  call v:lua.require("cmake").parse_codemodel_json_with_completion(function("s:_do_run_current_target"))
-endfunction
-
-function s:dump_current_target()
-  echo "Current target set to '" . s:get_cmake_target_file() . "' with args '" . s:get_cmake_target_args() . "'"
-endfunction
 
 function s:cmake_run_target_with_name(target)
   let s:cmake_target_file = s:get_cmake_build_dir() . '/' . g:tar_to_relative[a:target]
@@ -659,11 +484,11 @@ function s:_do_debug_current_target()
   endif
 
   if s:get_state("debugger") ==? 'gdb'
-    call s:cmake_build_current_target_with_completion(function('s:start_gdb'))
-  elseif s:get_state("debugger") ==? 'lldb'
-    call s:cmake_build_current_target_with_completion(function('s:start_lldb'))
+    call v:lua.require("cmake").cmake_build_current_target_with_completion(function('s:start_gdb'))
+  elseif v:lua.require("cmake").get_state("debugger") ==? 'lldb'
+    call v:lua.require("cmake").cmake_build_current_target_with_completion(function('s:start_lldb'))
   else
-    call s:cmake_build_current_target_with_completion(function('s:start_nvim_dap_lldb_vscode'))
+    call v:lua.require("cmake").cmake_build_current_target_with_completion(function('s:start_nvim_dap_lldb_vscode'))
   endif
 endfunction
 
@@ -675,16 +500,6 @@ endfunction
 
 function g:GetCMakeArgs()
   return s:get_cmake_arguments()
-endfunction
-
-function s:cmake_set_current_target_run_args(args)
-  if s:get_cmake_target_file() ==? v:null
-    call s:cmake_get_target_and_run_action(s:get_name_relative_pairs(), 's:update_target')
-    return
-  endif
-  call s:set_cmake_target_args(a:args)
-  call v:lua.require("cmake").write_cache_file()
-  call s:dump_current_target()
 endfunction
 
 function g:GetCMakeCurrentTargetRunArgs()
@@ -773,8 +588,8 @@ command! -nargs=0 CMakeDebugWithNvimDapLLDBVSCode call s:cmake_debug_current_tar
 
 command! -nargs=0 CMakePickTarget call v:lua.require("cmake").cmake_pick_target()
 command! -nargs=0 CMakePickExecutableTarget call s:cmake_pick_executable_target()
-command! -nargs=0 CMakeRunCurrentTarget call s:cmake_run_current_target()
-command! -nargs=* -complete=shellcmd CMakeSetCurrentTargetRunArgs call s:cmake_set_current_target_run_args(<q-args>)
+command! -nargs=0 CMakeRunCurrentTarget call v:lua.require("cmake").cmake_run_current_target()
+command! -nargs=* -complete=shellcmd CMakeSetCurrentTargetRunArgs call v:lua.require("cmake").cmake_set_current_target_run_args(<q-args>)
 command! -nargs=? -complete=customlist,s:get_build_tools CMakeBuildCurrentTarget call v:lua.require("cmake").cmake_build_current_target(<f-args>)
 
 command! -nargs=1 -complete=shellcmd CMakeClean call s:cmake_clean()

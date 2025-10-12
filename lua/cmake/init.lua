@@ -90,6 +90,10 @@ function M.add_cmake_target_to_target_list(target_name)
   })
 end
 
+function M.get_cmake_target_args()
+  return M.get_ctco("args")
+end
+
 function M.get_cmake_target_file()
   return M.state.dir_cache_object.current_target_file
 end
@@ -138,6 +142,16 @@ end
 
 function M._do_build_current_target()
   M._do_build_current_target_with_completion(function() end)
+end
+
+function M.cmake_set_current_target_run_args(args)
+  if M.get_cmake_target_file() == nil then
+    M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M.update_target)
+    return
+  end
+  M.set_ctco("args", args)
+  M.write_cache_file()
+  M.dump_current_target()
 end
 
 function M._update_target_and_build(target_name)
@@ -235,6 +249,39 @@ end
 
 M.parse_codemodel_json = vim.fn["g:cmake#ParseCodeModelJson"]
 M.cmake_configure_and_generate_with_completion = vim.fn["g:cmake#CMakeConfigureAndGenerateWithCompletion"]
+
+function M._run_current_target(job_id, exit_code, event)
+  M.close_last_buffer_if_open()
+  if exit_code == 0 then
+    M.get_only_window()
+    vim.cmd.terminal(M.get_cmake_target_file() .. " " .. M.get_cmake_target_args())
+  end
+  vim.g.vim_cmake_build_tool = vim.g.vim_cmake_build_tool_old
+end
+
+function M._update_target_and_run(target)
+  M.select_target(target)
+  M._do_run_current_target()
+end
+
+function M._do_run_current_target()
+  local target_file = M.get_cmake_target_file()
+  if target_file == "" or target_file == nil then
+    M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M._update_target_and_run)
+    return
+  end
+
+  vim.g.vim_cmake_build_tool_old = vim.g.vim_cmake_build_tool
+  if vim.g.vim_cmake_build_tool ~= "vsplit" then
+    vim.g.vim_cmake_build_tool = "vsplit"
+  end
+
+  M.cmake_build_current_target_with_completion(M._run_current_target)
+end
+
+function M.cmake_run_current_target()
+  M.parse_codemodel_json_with_completion(M._do_run_current_target)
+end
 
 function M.parse_codemodel_json_with_completion(completion)
   local build_dir = M.get_cmake_build_dir()
