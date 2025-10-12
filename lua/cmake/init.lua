@@ -1,3 +1,5 @@
+local ui = require("cmake.ui")
+
 local M = {}
 
 ---@class CMakeTarget
@@ -31,12 +33,47 @@ local M = {}
 ---@field dir_cache_object CMakeDirectory?
 ---@field current_target_cache_object CMakeTarget?
 
+local function read_json_file(file_path)
+  local file_contents = vim.fn.readfile(file_path)
+  local json_string = table.concat(file_contents, "\n")
+  assert(string.len(json_string) > 0, "JSON file " .. file_path .. " is empty")
+  return vim.fn.json_decode(json_string)
+end
+
+local function is_absolute_path(path)
+  return vim.startswith(path, "/")
+end
+
 function M.get_dco()
   return M.state.dir_cache_object
 end
 
 function M.get_ctco()
   return M.state.current_target_cache_object
+end
+
+function M.get_gco()
+  return M.state.global_cache_object
+end
+
+function M.get_run_args()
+  return M.get_ctco().args
+end
+
+function M.has_set_target()
+  return M.state.current_target_cache_object ~= nil
+end
+
+function M.get_current_target_file()
+  return M.get_ctco().current_target_file
+end
+
+function M.get_current_target_name()
+  return M.state.dir_cache_object.current_target
+end
+
+function M.get_build_dir()
+  return M.state.dir_cache_object.build_dir
 end
 
 function M.initialize_cache_file()
@@ -52,9 +89,7 @@ function M.initialize_cache_file()
     if vim.fn.filereadable(cache_file_path) == 0 then
       vim.fn.writefile({ "{}" }, cache_file_path)
     end
-    local file_contents = vim.fn.readfile(cache_file_path) or ""
-    local json_string = table.concat(file_contents, "\n")
-    return vim.fn.json_decode(json_string)
+    return read_json_file(cache_file_path)
   end)()
 
   if global_cache_object[cwd] == nil then
@@ -88,79 +123,14 @@ function M.initialize_cache_file()
   M.state.current_target_cache_object = M.state.dir_cache_object.targets[ct]
 end
 
-function M.get_run_args()
-  return M.get_ctco().args
-end
-
-function M.has_set_target()
-  return M.state.current_target_cache_object ~= nil
-end
-
-function M.get_current_target_file()
-  return M.get_ctco().current_target_file
-end
-
-function M.get_current_target_name()
-  return M.state.dir_cache_object.current_target
-end
-
-function M.get_build_dir()
-  return M.state.dir_cache_object.build_dir
-end
-
-local function is_absolute_path(path)
-  return vim.startswith(path, "/")
-end
-
-function M.check_if_window_is_alive(win)
-  return vim.fn.index(vim.api.nvim_list_wins(), win) > -1
-end
-
-function M.close_last_window_if_open()
-  if M.check_if_window_is_alive(vim.g.cmake_last_window) then
-    vim.api.nvim_win_close(vim.g.cmake_last_window, true)
-  end
-end
-
-function M.check_if_buffer_is_alive(buf)
-  return vim.fn.index(vim.api.nvim_list_bufs(), buf) > -1
-end
-
-function M.close_last_buffer_if_open()
-  if M.check_if_buffer_is_alive(vim.g.cmake_last_buffer) then
-    vim.api.nvim_buf_delete(vim.g.cmake_last_buffer, { force = true })
-  end
-end
-
-function M.get_only_window()
-  M.close_last_window_if_open()
-  M.close_last_buffer_if_open()
-  vim.cmd.vsplit()
-  vim.cmd.wincmd("L")
-  vim.cmd.enew()
-  vim.g.cmake_last_window = vim.api.nvim_get_current_win()
-  vim.g.cmake_last_buffer = vim.api.nvim_get_current_buf()
-end
-
 function M.cmake_set_current_target_run_args(run_args)
   if M.get_current_target_name() == nil then
-    M.cmake_get_target_and_run_action(M.update_target)
+    M.select_target_and_run_action(M.update_target)
     return
   end
-  M.set_ctco("args", run_args)
+  M.get_ctco().args = run_args
   M.write_cache_file()
   M.dump_current_target()
-end
-
-function M._update_target_and_build(target_name)
-  M.select_target(target_name)
-  M._build_target_with_completion(target_name)
-end
-
-function M.cmake_build_current_target_with_completion(completion)
-  M.parse_codemodel_json_with_completion(function()
-    M._build_target_with_completion(M.get_current_target_name(), completion)
-  end)
 end
 
 function M.get_buildable_targets()
@@ -235,7 +205,7 @@ function M.cmake_build_current_target(tool)
   -- configure, generate, parse, select, build
   local command = M.state.cmake_tool .. " " .. M.get_cmake_argument_string()
   print(command)
-  M.get_only_window()
+  ui.get_only_window()
   vim.fn.termopen(vim.fn.split(command), {
     on_exit =
         function(job_id, return_code, event_type)
@@ -252,10 +222,10 @@ end
 function M.build_target(target)
   assert(M.has_query_reply(), "Shouldn't call build_target without a query reply")
   assert(M.has_set_target(), "Shouldn't call build_target without a set target")
-  M._build_target_with_completion(target, function() end)
+  M.perform_build(target, function() end)
 end
 
-function M._build_target_with_completion(target, completion)
+function M.perform_build(target, completion)
   assert(M.has_set_target(), "Shouldn't call _build_target_with_completion without a set target")
   local build_dir = M.get_build_dir()
   if not is_absolute_path(build_dir) then
@@ -264,7 +234,7 @@ function M._build_target_with_completion(target, completion)
 
   if vim.g.vim_cmake_build_tool == "vsplit" then
     local command = "cmake --build " .. M.get_build_dir() .. " --target " .. target
-    M.get_only_window()
+    ui.get_only_window()
     vim.fn.termopen(command, { on_exit = completion })
   elseif vim.g.vim_cmake_build_tool == "vim-dispatch" then
     vim.o.makeprg = M.state.build_command .. " -C " .. build_dir .. " " .. target
@@ -386,23 +356,34 @@ function M.should_break_at_main()
   return vim.fn.filereadable(path) == 0
 end
 
-function M.cmake_debug_current_target()
-  M.parse_codemodel_json_with_completion(M._do_debug_current_target)
-end
-
 function M.cmake_debug_current_target_lldb()
-  M.set_state("debugger", "lldb")
-  M.cmake_debug_current_target()
+  M.parse_codemodel_json_with_completion(function()
+    if M.get_current_target_name() == nil then
+      M.select_target_and_run_action(M._update_target)
+    end
+
+    M.perform_build(M.get_current_target_name(), M.start_lldb)
+  end)
 end
 
 function M.cmake_debug_current_target_gdb()
-  M.set_state("debugger", "gdb")
-  M.cmake_debug_current_target()
+  M.parse_codemodel_json_with_completion(function()
+    if M.get_current_target_name() == nil then
+      M.select_target_and_run_action(M._update_target)
+    end
+
+    M.perform_build(M.get_current_target_name(), M.start_gdb)
+  end)
 end
 
 function M.cmake_debug_current_target_nvim_dap_lldb_vscode()
-  M.set_state("debugger", "nvim_dap_lldb_vscode")
-  M.cmake_debug_current_target()
+  M.parse_codemodel_json_with_completion(function()
+    if M.get_current_target_name() == nil then
+      M.select_target_and_run_action(M._update_target)
+    end
+
+    M.perform_build(M.start_nvim_dap_lldb_vscode)
+  end)
 end
 
 function M.start_lldb(_, exit_code, _)
@@ -428,8 +409,8 @@ function M.start_lldb(_, exit_code, _)
   local init_file = "/tmp/lldb_init_vim_cmake"
   local _ = vim.fn.writefile(commands, init_file)
 
-  M.close_last_window_if_open()
-  M.close_last_buffer_if_open()
+  ui.close_last_window_if_open()
+  ui.close_last_buffer_if_open()
 
   local lldb_init_arg = " -s " .. init_file
 
@@ -460,20 +441,13 @@ function M.start_gdb(job_id, exit_code, event)
   local init_file = "/tmp/gdb_init_vim_cmake"
   local _ = vim.fn.writefile(commands, init_file)
 
-  M.close_last_window_if_open()
-  M.close_last_buffer_if_open()
+  ui.close_last_window_if_open()
+  ui.close_last_buffer_if_open()
 
   local gdb_init_arg = " -s " .. init_file
 
   vim.cmd("GdbStartLLDB gdb -q " ..
     gdb_init_arg .. " --args " .. M.get_current_target_file() .. " " .. M.get_run_args())
-end
-
-local function read_json_file(file_path)
-  local file_contents = vim.fn.readfile(file_path)
-  local json_string = table.concat(file_contents, "\n")
-  assert(string.len(json_string) > 0, "JSON file " .. file_path .. " is empty")
-  return vim.fn.json_decode(json_string)
 end
 
 function M.parse_codemodel_json()
@@ -533,29 +507,12 @@ function M.start_nvim_dap_lldb_vscode(job_id, exit_code, event)
   local init_file = "/tmp/lldb_init_vim_cmake"
   local _ = vim.fn.writefile(commands, init_file)
 
-  M.close_last_window_if_open()
-  M.close_last_buffer_if_open()
+  ui.close_last_window_if_open()
+  ui.close_last_buffer_if_open()
 
   local command = "DebugLldb " ..
       M.get_current_target_file() .. " --lldbinit " .. init_file .. " -- " .. M.get_run_args()
   vim.cmd(command)
-end
-
-function M._do_debug_current_target()
-  if M.get_current_target_name() == nil then
-    M.cmake_get_target_and_run_action(M._update_target)
-  end
-
-  if M.get_debugger() == "gdb" then
-    M.cmake_build_current_target_with_completion(M.start_gdb)
-  elseif M.get_debugger() == "lldb" then
-    M.cmake_build_current_target_with_completion(M.start_lldb)
-  elseif M.get_debugger() == "nvim_dap_lldb_vscode" then
-    M.cmake_build_current_target_with_completion(M.start_nvim_dap_lldb_vscode)
-  else
-    print("Debugger " .. M.get_debugger() .. " not supported")
-    return
-  end
 end
 
 function M.toggle_break_at_main()
@@ -606,16 +563,16 @@ end
 function M.configure_and_generate_with_completion(completion)
   if vim.fn.filereadable(M.get_source_dir() .. "/CMakeLists.txt") == 0 then
     print("missing cmakelists.txt NYI")
-    -- if exists("g:cmake_template_file")
-    --   silent exec "! cp " . g:cmake_template_file . " " . v:lua.require("cmake").get_cmake_source_dir() . "/CMakeLists.txt" else
-    --   echom "Could not find a CMakeLists at directory " . v:lua.require("cmake").get_cmake_source_dir()
-    --   return
-    -- endif
+    if vim.g.cmake_template_file ~= nil then
+      vim.cmd("!cp " .. vim.g.cmake_template_file .. " " .. M.get_source_dir() .. "/CMakeLists.txt")
+    else
+      print("Could not find a CMakeLists at directory " .. M.get_cmake_source_dir())
+    end
   end
 
   local command = M.state.cmake_tool .. " " .. M.get_cmake_argument_string()
   print(command)
-  M.get_only_window()
+  ui.get_only_window()
   vim.fn.termopen(vim.fn.split(command), { on_exit = completion })
 end
 
@@ -635,15 +592,17 @@ function M._do_run_current_target()
     vim.g.vim_cmake_build_tool = "vsplit"
   end
 
-  M.cmake_build_current_target_with_completion(function(_, exit_code, _)
-    M.close_last_buffer_if_open()
-    if exit_code == 0 then
-      M.get_only_window()
-      vim.cmd.terminal(target_file .. " " .. M.get_run_args())
-    else
-      print("Build failed, cannot run target")
-    end
-    vim.g.vim_cmake_build_tool = vim.g.vim_cmake_build_tool_old
+  M.parse_codemodel_json_with_completion(function()
+    M.perform_build(M.get_current_target_name(), function(_, exit_code, _)
+      ui.close_last_buffer_if_open()
+      if exit_code == 0 then
+        ui.get_only_window()
+        vim.cmd.terminal(target_file .. " " .. M.get_run_args())
+      else
+        print("Build failed, cannot run target")
+      end
+      vim.g.vim_cmake_build_tool = vim.g.vim_cmake_build_tool_old
+    end)
   end)
 end
 
@@ -672,7 +631,7 @@ function M.cmake_build_all()
   M.parse_codemodel_json_with_completion(function(action)
     if vim.g.vim_cmake_build_tool == "vsplit" then
       local command = "cmake --build " .. M.get_build_dir()
-      M.get_only_window()
+      ui.get_only_window()
       vim.fn.termopen(command, { on_exit = action })
     elseif vim.g.vim_cmake_build_tool == "Makeshift" then
       print("Makeshift NYI")
@@ -714,18 +673,18 @@ function M.get_executable_targets()
 end
 
 function M.cmake_close_windows()
-  M.close_last_window_if_open()
-  M.close_last_buffer_if_open()
+  ui.close_last_window_if_open()
+  ui.close_last_buffer_if_open()
 end
 
 function M._do_cmake_pick_executable_target(pairs)
-  M.cmake_get_target_and_run_action(M.select_target)
+  M.select_target_and_run_action(M.select_target)
   M.dump_current_target()
 end
 
 function M.cmake_pick_target()
   M.parse_codemodel_json_with_completion(function()
-    M.cmake_get_target_and_run_action(M.select_target)
+    M.select_target_and_run_action(M.select_target)
     M.dump_current_target()
   end)
 end
@@ -744,7 +703,7 @@ function M.select_target(target_name)
   M.write_cache_file()
 end
 
-function M.cmake_get_target_and_run_action(action)
+function M.select_target_and_run_action(action)
   local names = M.get_buildable_targets()
 
   if #names == 1 then
@@ -765,26 +724,11 @@ function M.add_dco_target_if_new(name, target_object)
   M.state.dir_cache_object.targets[name] = target_object
 end
 
-function M.set_ctco(key, value)
-  M.state.current_target_cache_object[key] = value
-end
-
-function M.set_state(key, value)
-  M.state[key] = value
-end
-
 function M.write_cache_file()
   local cache_file = M.state.global_cache_object
   local serial = vim.fn.json_encode(cache_file)
   local split = vim.fn.split(serial, "\n")
   vim.fn.writefile(split, M.state.cache_file_path)
-end
-
-function M.set_state_child(key, child, value)
-  if M.state[key] == nil then
-    M.state[key] = {}
-  end
-  M.state[key][child] = value
 end
 
 function M.cmake_open_cache_file()
@@ -900,14 +844,12 @@ function M.run_lit_on_file()
   if vim.fn.filereadable(bin_lit_path) == 1 then
     lit_path = bin_lit_path
   end
-  M.get_only_window()
+  ui.get_only_window()
   vim.fn.termopen({ lit_path, M.state.extra_lit_args, full_path })
 end
 
 function M.setup(opts)
-  print("SETUP")
-  vim.g.cmake_last_window = nil
-  vim.g.cmake_last_buffer = nil
+  ui.setup(opts)
 
   if not vim.g.vim_cmake_build_tool then
     vim.g.vim_cmake_build_tool = 'vsplit'
