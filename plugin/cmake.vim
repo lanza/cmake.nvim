@@ -23,25 +23,6 @@ function s:decode_json(string) abort
   endif
 endfunction
 
-function s:encode_json(object) abort
-  if exists('*json_encode')
-    return json_encode(a:object)
-  endif
-  if type(a:object) == v:t_string
-    return '"' . substitute(a:object, "[\001-\031\"\\\\]", '\=printf("\\u%04x", char2nr(submatch(0)))', 'g') . '"'
-  elseif type(a:object) == v:t_list
-    return '['.join(map(copy(a:object), 's:encode_json(v:val)'),', ').']'
-  elseif type(a:object) == v:t_dict
-    let pairs = []
-    for key in keys(a:object)
-      call add(pairs, s:encode_json(key) . ': ' . s:encode_json(a:object[key]))
-    endfor
-    return '{' . join(pairs, ', ') . '}'
-  else
-    return string(a:object)
-  endif
-endfunction
-
 function s:set_if_empty(object, key, val)
   if !has_key(a:object, a:key)
     let a:object[a:key] = a:val
@@ -534,7 +515,7 @@ endfunction
 
 function s:write_cache_file()
   let cache = s:get_cmake_cache_file()
-  let serial = s:encode_json(cache)
+  let serial = encode_json(cache)
   let split = split(serial, '\n')
   call writefile(split, $HOME . '/.vim_cmake.json')
 endfunction
