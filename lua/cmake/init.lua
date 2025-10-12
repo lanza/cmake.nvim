@@ -35,6 +35,100 @@ function M.get_current_target_file()
   return M.state.dir_cache_object.current_target_file
 end
 
+function M.initialize_cache_file()
+  if vim.g.cmake_template_file ~= nil then
+    M.state.template_file = vim.g.cmake_template_file
+  end
+
+  if vim.g.cmake_default_build_dir ~= nil then
+    M.state.default_build_dir = vim.g.cmake_default_build_dir
+  else
+    M.state.default_build_dir = "build"
+  end
+  if vim.g.cmake_extra_lit_args ~= nil then
+    M.state.extra_lit_args = vim.g.cmake_extra_lit_args
+  else
+    M.state.extra_lit_args = "-a"
+  end
+  if vim.g.vim_cmake_debugger ~= nil then
+    M.state.debugger = vim.g.vim_cmake_debugger
+  end
+
+  if vim.fn.filereadable(M.state.cache_file_path) == 1 then
+    local contents = vim.fn.readfile(M.state.cache_file_path)
+    local json_string = vim.fn.join(contents, "\n")
+
+    M.state.cache_object = vim.fn.json_decode(json_string)
+  else
+    M.state.cache_object = {}
+  end
+
+  if M.state.cache_object[vim.fn.getcwd()] == nil then
+    M.state.cache_object[vim.fn.getcwd()] = {}
+  end
+  M.bind_dco()
+
+  M.set_dco_if_empty("cmake_arguments", {})
+  M.set_dco_if_empty("build_dir", M.state.default_build_dir)
+  M.set_dco_if_empty("source_dir", ".")
+  M.set_dco_if_empty("targets", {})
+  M.set_dco_if_empty("name_relative_pairs", {})
+  M.set_dco_if_empty("current_target_file", nil)
+  M.bind_ctco()
+end
+
+function M.add_cmake_target_to_target_list(target_name)
+  local relative = vim.g.tar_to_relative[target_name]
+  local file = M.state.dir_cache_object.build_dir .. "/" .. relative
+
+  M.add_dco_target_if_new(file, {
+    current_target_file = file,
+    current_target_relative = relative,
+    current_target_name = target_name,
+    args = "",
+    breakpoints = {},
+  })
+end
+
+function M._do_cmake_pick_executable_target(pairs)
+  M.cmake_get_target_and_run_action(pairs, M.select_target)
+  M.dump_current_target()
+end
+
+function M._do_cmake_pick_target()
+  M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M.select_target)
+  M.dump_current_target()
+end
+
+function M.dump_current_target()
+  print("Current target set to " .. M.get_ctco("current_target_file") .. " with args " .. M.get_ctco("args"))
+end
+
+function M.select_target(target_name)
+  M.add_cmake_target_to_target_list(target_name)
+
+  local relative = vim.g.tar_to_relative[target_name]
+  local file = M.state.dir_cache_object.build_dir .. "/" .. relative
+
+  M.set_dco("current_target_file", file)
+  M.bind_ctco()
+end
+
+function M.cmake_get_target_and_run_action(name_relative_pairs, action)
+  local names = {}
+  for index, target in ipairs(name_relative_pairs) do
+    local name = target.name
+    table.insert(names, name)
+  end
+
+  if #names == 1 then
+    action(names[1])
+  else
+    vim.o.makeprg = M.state.build_command
+    vim.ui.select(names, { prompt = 'Select Target:' }, action)
+  end
+end
+
 function M.add_dco_target_if_new(name, target_object)
   -- print(vim.inspect(M.get_dco("targets")))
   if M.state.dir_cache_object.targets[name] ~= nil then

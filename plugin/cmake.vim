@@ -20,19 +20,6 @@ function s:set_cmake_target_file(value)
   call v:lua.require("cmake").bind_ctco()
 endfunction
 
-function s:add_cmake_target_to_target_list(target_name)
-  let l:file = s:get_cmake_build_dir() . '/' . g:tar_to_relative[a:target_name]
-  let l:relative = g:tar_to_relative[a:target_name]
-
-  call v:lua.require("cmake").add_dco_target_if_new(l:file, {
-      \ "current_target_file" : l:file,
-      \ "current_target_relative" : l:relative,
-      \ "current_target_name" : a:target_name,
-      \ "args": "",
-      \ "breakpoints": {}
-      \ })
-endfunction
-
 function s:get_cmake_target_relative()
   return v:lua.require("cmake").state.current_a.current_target_relative.current_target_relative
 endfunction
@@ -166,55 +153,7 @@ function s:parse_codemodel_json_with_completion(completion)
   endif
 endfunction
 
-function s:initialize_cache_file()
-  " initialize some variables
-  if exists("g:cmake_template_file")
-    call v:lua.require("cmake").set_state("template_file", g:cmake_template_file)
-  end
-  if exists("g:cmake_default_build_dir")
-    call v:lua.require("cmake").set_state("default_build_dir", g:cmake_default_build_dir)
-  else
-    call v:lua.require("cmake").set_state("default_build_dir", "build")
-  end
-  if exists("g:cmake_extra_lit_args")
-    call v:lua.require("cmake").set_state("extra_lit_args", g:cmake_extra_lit_args)
-  else
-    call v:lua.require("cmake").set_state("extra_lit_args", "-a")
-  endif
-  if exists("g:vim_cmake_debugger")
-    call v:lua.require("cmake").set_state("debugger", g:vim_cmake_debugger)
-  endif
-
-  " load cache file from disk
-  if filereadable(v:lua.require("cmake").state.cache_file_path)
-    let l:contents = readfile(v:lua.require("cmake").state.cache_file_path)
-    let l:json_string = join(l:contents, "\n")
-
-    call s:set_cmake_cache_file(json_decode(l:json_string))
-  else
-    call s:set_cmake_cache_file(json_decode('{}'))
-  endif
-
-  " load directory cache object
-  if !has_key(v:lua.require("cmake").state.cache_object, getcwd())
-    call v:lua.require("cmake").set_state_child("cache_object", getcwd(), {})
-  endif
-  call v:lua.require("cmake").bind_dco()
-
-  " initialize directory cache object
-  call v:lua.require("cmake").set_dco_if_empty("cmake_arguments", [])
-  call v:lua.require("cmake").set_dco_if_empty("build_dir", v:lua.require("cmake").state.default_build_dir)
-  call v:lua.require("cmake").set_dco_if_empty("source_dir", ".")
-  call v:lua.require("cmake").set_dco_if_empty("targets", {})
-  call v:lua.require("cmake").set_dco_if_empty("name_relative_pairs", [])
-
-  " initialize current target cache object
-  call v:lua.require("cmake").set_dco_if_empty("current_target_file", v:null)
-
-  call v:lua.require("cmake").bind_ctco()
-endfunction
-
-call s:initialize_cache_file()
+call v:lua.require("cmake").initialize_cache_file()
 
 function s:make_query_files()
   let l:build_dir = s:get_cmake_build_dir()
@@ -349,7 +288,7 @@ endfunction
 let s:noop = function('s:noop_function')
 
 function s:_update_target_and_build(target)
-  call s:select_target(a:target)
+  call v:lua:require("cmake").select_target(target)
   call s:_do_build_current_target()
 endfunction
 
@@ -477,13 +416,11 @@ function s:get_execs_from_name_relative_pairs()
 endfunction
 
 function s:_do_cmake_pick_executable_target()
-  call s:cmake_get_target_and_run_action(s:get_execs_from_name_relative_pairs(), 's:select_target')
-  call s:dump_current_target()
+  call v:lua.require("cmake")._do_cmake_pick_executable_target(s:get_execs_from_name_relative_pairs())
 endfunction
 
 function s:_do_cmake_pick_target()
-  call s:cmake_get_target_and_run_action(s:get_name_relative_pairs(), 's:select_target')
-  call s:dump_current_target()
+  call v:lua.require("cmake")._do_cmake_pick_target()
 endfunction
 
 function s:cmake_close_windows()
@@ -514,7 +451,7 @@ endf
 
 function s:_update_target_and_run(target)
   " echom "_update_target_and_run(" . a:target . ")"
-  call s:select_target(a:target)
+  call v:lua.require("cmake").select_target(a:target)
   call s:_do_run_current_target()
 endfunction
 
@@ -537,15 +474,6 @@ endfunction
 function s:cmake_run_current_target()
   " echom "s:cmake_run_current_target()"
   call s:parse_codemodel_json_with_completion(function("s:_do_run_current_target"))
-endfunction
-
-function s:select_target(target_name)
-  call s:add_cmake_target_to_target_list(a:target_name)
-
-  let l:file = s:get_cmake_build_dir() . '/' . g:tar_to_relative[a:target_name]
-  call s:set_cmake_target_file(l:file)
-
-  " call v:lua.require("cmake").write_cache_file()
 endfunction
 
 function s:dump_current_target()
