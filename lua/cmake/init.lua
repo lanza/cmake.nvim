@@ -78,7 +78,9 @@ function M.initialize_cache_file()
 end
 
 function M.add_cmake_target_to_target_list(target_name)
-  local relative = vim.g.tar_to_relative[target_name]
+  -- inspect(target_name)
+  -- inspect(M.state.tar_to_relative)
+  local relative = M.state.tar_to_relative[target_name]
   local file = M.state.dir_cache_object.build_dir .. "/" .. relative
 
   M.add_dco_target_if_new(file, {
@@ -252,18 +254,16 @@ function M._do_build_all_with_completion(action)
   end
 end
 
-M.parse_codemodel_json = vim.fn["g:cmake#ParseCodeModelJson"]
-
 function M.configure_and_generate()
   M.configure_and_generate_with_completion(function() end)
 end
 
 function M.get_cmake_argument_string()
   local build_dir = M.get_cmake_build_dir()
-  if not vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/query") then
+  if vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/query") == 0 then
     vim.fn.mkdir(build_dir .. "/.cmake/api/v1/query", "p")
   end
-  if not vim.fn.filereadable(build_dir .. "/.cmake/api/v1/query/codemodel-v2") then
+  if vim.fn.filereadable(build_dir .. "/.cmake/api/v1/query/codemodel-v2") == 0 then
     vim.fn.writefile({ " " }, build_dir .. "/.cmake/api/v1/query/codemodel-v2")
   end
   local arguments = {
@@ -435,6 +435,55 @@ function M.start_gdb(job_id, exit_code, event)
     gdb_init_arg .. " --args " .. M.get_cmake_target_file() .. " " .. M.get_cmake_target_args())
 end
 
+function M.parse_codemodel_json()
+  local build_dir = M.get_cmake_build_dir()
+  local cmake_query_response_dir = build_dir .. "/.cmake/api/v1/reply/"
+  local codemodel_file = vim.fn.globpath(cmake_query_response_dir, "codemodel*")
+  local codemodel_contents = vim.fn.readfile(codemodel_file)
+  local json_string = vim.fn.join(codemodel_contents, "\n")
+
+  if vim.fn.len(json_string) == 0 then
+    print("CMake codemodel file is empty. Please run CMake configure and generate. Fix this")
+    return
+  end
+
+  local json = vim.fn.json_decode(json_string)
+
+  local configurations = json["configurations"]
+  local first_configuration = configurations[1]
+  local target_dicts = first_configuration["targets"]
+
+  M.set_dco("name_relative_pairs", {})
+
+  M.state.tar_to_relative = {}
+
+  for _, target in pairs(target_dicts) do
+    local json_file = target["jsonFile"]
+    local name = target["name"]
+    local file = vim.fn.readfile(cmake_query_response_dir .. json_file)
+    local target_json_string = vim.fn.join(file, "\n")
+    local target_file_data = vim.fn.json_decode(target_json_string)
+    -- print("target_file_data: ")
+    -- inspect(target_file_data)
+    if vim.fn.has_key(target_file_data, "artifacts") == 1 then
+      local artifacts = target_file_data["artifacts"]
+      local artifact = artifacts[1]
+      local path = artifact["path"]
+      local type = target_file_data["type"]
+      local is_exec = type == "EXECUTABLE"
+      M.add_name_relative_pair(name, path, is_exec, true)
+      -- inspect(M.state.tar_to_relative)
+      -- print(name .. " -> " .. path)
+      M.state.tar_to_relative[name] = path
+      -- inspect(M.state.tar_to_relative)
+    else
+      M.add_name_relative_pair(name, false, false)
+    end
+  end
+
+  return true
+end
+
 function M.start_nvim_dap_lldb_vscode(job_id, exit_code, event)
   if exit_code ~= 0 then
     return
@@ -460,8 +509,8 @@ function M.start_nvim_dap_lldb_vscode(job_id, exit_code, event)
   M.close_last_buffer_if_open()
 
   local command = "DebugLldb " ..
-  M.get_cmake_target_file() .. " --lldbinit " .. init_file .. " -- " .. M.get_cmake_target_args()
-  inspect(command)
+      M.get_cmake_target_file() .. " --lldbinit " .. init_file .. " -- " .. M.get_cmake_target_args()
+  -- inspect(command)
   vim.cmd(command)
 end
 
@@ -582,8 +631,11 @@ end
 
 function M.parse_codemodel_json_with_completion(completion)
   local build_dir = M.get_cmake_build_dir()
-  if not vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/reply") then
-    M.configure_and_generate_with_completion(completion)
+  if vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/reply") == 0 then
+    M.configure_and_generate_with_completion(function()
+      M.parse_codemodel_json()
+      completion()
+    end)
   else
     M.parse_codemodel_json()
     completion()
@@ -634,19 +686,23 @@ function M.select_target(target_name)
   end
   M.add_cmake_target_to_target_list(target_name)
 
-  local relative = vim.g.tar_to_relative[target_name]
+  local relative = M.state.tar_to_relative[target_name]
   local file = M.state.dir_cache_object.build_dir .. "/" .. relative
 
   M.set_dco("current_target_file", file)
   M.bind_ctco()
+  M.write_cache_file()
 end
 
 function M.cmake_get_target_and_run_action(name_relative_pairs, action)
   local names = {}
-  for index, target in ipairs(name_relative_pairs) do
+  for _, target in ipairs(name_relative_pairs) do
     local name = target.name
     table.insert(names, name)
   end
+
+  -- inspect(name_relative_pairs)
+  -- inspect(names)
 
   if #names == 1 then
     action(names[1])
