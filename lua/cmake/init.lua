@@ -19,13 +19,18 @@ end
 ---@field current_target_file string
 ---@field current_target_relative string
 ---@field current_target_name string
+---@field is_exec boolean
+
+---@class PhonyTarget
+---@field name string
 
 ---@class CMakeDirectory
 ---@field cmake_arguments string[]
 ---@field build_dir string
 ---@field source_dir string
 ---@field targets table<string, CMakeTarget>
----@field name_relative_pairs {name: string, relative: boolean, is_exec: boolean, is_artifact: boolean}[]
+---@field phony_targets table<string, PhonyTarget>
+---@field name_relative_pairs {name: string, relative: string?, is_exec: boolean, is_artifact: boolean}[]
 ---@field current_target_file string?
 
 ---@class CMakeState
@@ -48,7 +53,7 @@ function M.get_dco(key)
 end
 
 function M.get_current_target_file()
-  return M.state.dir_cache_object.current_target_file
+  return M.state.dir_cache_object.current_target
 end
 
 function M.initialize_cache_file()
@@ -61,6 +66,9 @@ function M.initialize_cache_file()
   local cache_file_path = vim.g.cmake_cache_file_path or vim.env.HOME .. "/.vim_cmake.json"
 
   local global_cache_object = (function()
+    if vim.fn.filereadable(cache_file_path) == 0 then
+      vim.fn.writefile({ "{}" }, vim.env.HOME .. "/.vim_cmake.json")
+    end
     local file_contents = vim.fn.readfile(cache_file_path) or ""
     local json_string = table.concat(file_contents, "\n")
     return vim.fn.json_decode(json_string)
@@ -71,10 +79,11 @@ function M.initialize_cache_file()
     build_dir = default_build_dir,
     source_dir = ".",
     targets = {},
+    phoney_targets = {},
     name_relative_pairs = {},
-    current_target_file = nil,
+    current_target = nil,
   }
-  local current_target_cache_object = dir_cache_object.targets[dir_cache_object.current_target_file]
+  local current_target_cache_object = dir_cache_object.targets[dir_cache_object.current_target]
 
   M.state = {
     template_file = template_file,
@@ -88,7 +97,8 @@ function M.initialize_cache_file()
     current_target_cache_object = current_target_cache_object,
   }
 
-  M.bind_ctco()
+  local ct = M.state.dir_cache_object.current_target
+  M.state.current_target_cache_object = M.state.dir_cache_object.targets[ct]
 end
 
 function M.get_cmake_target_args()
@@ -104,7 +114,7 @@ function M.has_set_target()
 end
 
 function M.get_cmake_target_file()
-  return M.state.dir_cache_object.current_target_file
+  return M.state.dir_cache_object.current_target
 end
 
 function M.get_cmake_target_name()
@@ -155,7 +165,7 @@ end
 
 function M.cmake_set_current_target_run_args(run_args)
   if M.get_cmake_target_file() == nil then
-    M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M.update_target)
+    M.cmake_get_target_and_run_action(M.update_target)
     return
   end
   M.set_ctco("args", run_args)
@@ -170,7 +180,7 @@ end
 
 function M._do_build_current_target_with_completion(completion)
   if M.get_cmake_target_file() == nil then
-    M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M._update_target_and_build)
+    M.cmake_get_target_and_run_action(M._update_target_and_build)
     return
   end
 
@@ -185,63 +195,14 @@ end
 
 function M.get_buildable_targets()
   local names = {}
-  for _, target in ipairs(M.get_name_relative_pairs()) do
-    local name = target.name
+  for name, _ in pairs(M.state.dir_cache_object.targets) do
     table.insert(names, name)
   end
   return names
 end
 
-function M.cmake_build_current_target(tool)
-  local previous_build_tool = vim.g.vim_cmake_build_tool
-  if tool ~= nil and tool ~= "" then
-    vim.g.vim_cmake_build_tool = tool
-  end
-
-  local build_dir = M.get_build_dir()
+function M.ensure_cmakelists_exists()
   local source_dir = M.get_source_dir()
-
-  local handler1 = function()
-    if M.has_set_target() then
-      M._build_target_with_completion(M.get_cmake_target_name(), function() end)
-      return
-    end
-
-    local handler = function(target_name)
-      if M.has_set_target() then
-        M._build_target_with_completion(M.get_cmake_target_name(), function() end)
-      end
-
-      M.select_target(target_name)
-
-      M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), function()
-        M.select_target(target_name)
-        if M.get_cmake_target_file() == nil then
-          M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M._update_target_and_build)
-          return
-        end
-
-        M._build_target_with_completion(M.get_cmake_target_name(), function() end)
-      end)
-    end
-
-    local names = M.get_buildable_targets()
-
-    if #names == 1 then
-      handler(names[1])
-    else
-      vim.o.makeprg = M.state.build_command
-      vim.ui.select(names, { prompt = 'Select Target:' }, handler)
-    end
-  end
-
-  if vim.fn.isdirectory(build_dir .. "/.cmake/api/v1/reply") == 1 then
-    M.parse_codemodel_json()
-    handler1()
-    vim.g.vim_cmake_build_tool = previous_build_tool
-    return
-  end
-
   if vim.fn.filereadable(source_dir .. "/CMakeLists.txt") == 0 then
     if vim.g.cmake_template_file ~= nil then
       vim.cmd.system("cp " .. vim.g.cmake_template_file .. " " .. source_dir .. "/CMakeLists.txt")
@@ -250,18 +211,76 @@ function M.cmake_build_current_target(tool)
       return
     end
   end
+end
 
+function M.has_query_reply()
+  local build_dir = M.get_build_dir()
+  return #vim.fn.globpath(vim.fn.getcwd() .. "/" .. build_dir .. "/.cmake/api/v1/reply/", "codemodel*") > 0
+end
+
+function M.cmake_build_current_target(tool)
+  local previous_build_tool = vim.g.vim_cmake_build_tool
+  if tool ~= nil and tool ~= "" then
+    vim.g.vim_cmake_build_tool = tool
+  end
+
+  -- build
+  if M.has_query_reply() and M.has_set_target() then
+    M.build_target(M.get_cmake_target_name())
+    return
+  end
+
+  local parse_select_target_and_build = function()
+    M.parse_codemodel_json()
+
+    local names = M.get_buildable_targets()
+
+    if #names == 0 then
+      print("No buildable targets found")
+      return
+    end
+
+    if #names == 1 then
+      M.select_target(names[1])
+      M.build_target(M.get_cmake_target_name())
+    else
+      vim.o.makeprg = M.state.build_command
+      vim.ui.select(names, { prompt = 'Select Target:' }, function(target_name)
+        M.select_target(target_name)
+        M.build_target(M.get_cmake_target_name())
+      end)
+    end
+  end
+
+  -- parse, select, build
+  if M.has_query_reply() then
+    parse_select_target_and_build()
+    vim.g.vim_cmake_build_tool = previous_build_tool
+    return
+  end
+
+  -- if we haven't generated, do we at least have a CMakeLists.txt?
+  M.ensure_cmakelists_exists()
+
+  -- configure, generate, parse, select, build
   local command = M.state.cmake_tool .. " " .. M.get_cmake_argument_string()
   print(command)
   M.get_only_window()
   vim.fn.termopen(vim.fn.split(command), {
     on_exit =
-        function()
-          M.parse_codemodel_json()
-          handler1()
+        function(job_id, return_code, event_type)
+          if return_code == 0 then
+            parse_select_target_and_build()
+          else
+            print("CMake configuration failed, cannot build target")
+          end
           vim.g.vim_cmake_build_tool = previous_build_tool
         end
   })
+end
+
+function M.build_target(target)
+  M._build_target_with_completion(target, function() end)
 end
 
 function M._build_target_with_completion(target, completion)
@@ -509,59 +528,43 @@ function M.start_gdb(job_id, exit_code, event)
     gdb_init_arg .. " --args " .. M.get_cmake_target_file() .. " " .. M.get_cmake_target_args())
 end
 
+local function read_json_file(file_path)
+  local file_contents = vim.fn.readfile(file_path)
+  local json_string = table.concat(file_contents, "\n")
+  assert(string.len(json_string) > 0, "JSON file " .. file_path .. " is empty")
+  return vim.fn.json_decode(json_string)
+end
+
 function M.parse_codemodel_json()
   local build_dir = M.get_build_dir()
   local cmake_query_response_dir = build_dir .. "/.cmake/api/v1/reply/"
   local codemodel_file = vim.fn.globpath(cmake_query_response_dir, "codemodel*")
-  local codemodel_contents = vim.fn.readfile(codemodel_file)
-  local json_string = vim.fn.join(codemodel_contents, "\n")
 
-  if string.len(json_string) == 0 then
-    print("CMake codemodel file is empty. Please run CMake configure and generate. Fix this")
-    return
-  end
+  local targets = read_json_file(codemodel_file).configurations[1].targets
 
-  local json = vim.fn.json_decode(json_string)
+  for _, target in pairs(targets) do
+    local name = target.name
+    local target_file_data = read_json_file(cmake_query_response_dir .. target.jsonFile)
 
-  local configurations = json["configurations"]
-  local first_configuration = configurations[1]
-  local target_dicts = first_configuration["targets"]
+    local artifacts = target_file_data.artifacts
+    if artifacts then
+      local relative_path = artifacts[1].path
+      local is_exec = target_file_data.type == "EXECUTABLE"
 
-  M.set_dco("name_relative_pairs", {})
+      local filepath = M.state.dir_cache_object.build_dir .. "/" .. relative_path
 
-  M.state.tar_to_relative = {}
-
-  for _, target in pairs(target_dicts) do
-    local json_file = target["jsonFile"]
-    local name = target["name"]
-    local file = vim.fn.readfile(cmake_query_response_dir .. json_file)
-    local target_json_string = vim.fn.join(file, "\n")
-    local target_file_data = vim.fn.json_decode(target_json_string)
-    -- print("target_file_data: ")
-    -- inspect(target_file_data)
-    if vim.fn.has_key(target_file_data, "artifacts") == 1 then
-      local artifacts = target_file_data["artifacts"]
-      local artifact = artifacts[1]
-      local path = artifact["path"]
-      local type = target_file_data["type"]
-      local is_exec = type == "EXECUTABLE"
-      M.add_name_relative_pair(name, path, is_exec, true)
-      -- inspect(M.state.tar_to_relative)
-      -- print(name .. " -> " .. path)
-      M.state.tar_to_relative[name] = path
-      -- inspect(M.state.tar_to_relative)
-      local relative = M.state.tar_to_relative[name]
-      local filepath = M.state.dir_cache_object.build_dir .. "/" .. relative
-
-      M.add_dco_target_if_new(filepath, {
+      M.state.dir_cache_object.targets[name] = {
         current_target_file = filepath,
-        current_target_relative = relative,
+        current_target_relative = relative_path,
         current_target_name = name,
         args = "",
         breakpoints = {},
-      })
+        is_exec = is_exec,
+      }
     else
-      M.add_name_relative_pair(name, false, false)
+      M.state.dir_cache_object.phoney_targets[name] = {
+        name = name,
+      }
     end
   end
 
@@ -600,7 +603,7 @@ end
 
 function M._do_debug_current_target()
   if M.get_cmake_target_file() == nil then
-    M.cmake_get_target_and_run_action("BROKEN", M._update_target)
+    M.cmake_get_target_and_run_action(M._update_target)
   end
 
   if M.get_debugger() == "gdb" then
@@ -693,7 +696,7 @@ end
 function M._do_run_current_target()
   local target_file = M.get_cmake_target_file()
   if target_file == "" or target_file == nil then
-    M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M._update_target_and_run)
+    M.cmake_get_target_and_run_action(M._update_target_and_run)
     return
   end
 
@@ -737,13 +740,20 @@ function M.cmake_build_all()
   M.cmake_build_all_with_completion(function() end)
 end
 
+---@return {name: string, relative: boolean, is_exec: boolean, is_artifact: boolean}[]
 function M.get_name_relative_pairs()
-  return M.get_dco("name_relative_pairs")
+  return M.state.dir_cache_object.name_relative_pairs
 end
 
-function M.get_execs_from_name_relative_pairs()
-  -- let l:filtered = filter(s:get_name_relative_pairs(), "v:val.is_exec")
-  print("get execs_from_name_relative_pairs NYI")
+function M.get_executable_targets()
+  local names = {}
+  for _, target in ipairs(M.state.dir_cache_object.targets) do
+    if target.is_exec then
+      local name = target.name
+      table.insert(names, name)
+    end
+  end
+  return names
 end
 
 function M.cmake_close_windows()
@@ -752,13 +762,13 @@ function M.cmake_close_windows()
 end
 
 function M._do_cmake_pick_executable_target(pairs)
-  M.cmake_get_target_and_run_action(pairs, M.select_target)
+  M.cmake_get_target_and_run_action(M.select_target)
   M.dump_current_target()
 end
 
 function M.cmake_pick_target()
   M.parse_codemodel_json_with_completion(function()
-    M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M.select_target)
+    M.cmake_get_target_and_run_action(M.select_target)
     M.dump_current_target()
   end)
 end
@@ -771,22 +781,15 @@ function M.select_target(target_name)
   assert(target_name ~= nil, "Invalid target to select_target")
   assert(target_name ~= "", "Invalid target to select_target")
 
-  local target = M.get_dco("targets")[target_name]
-  M.set_dco("current_target_file", target.filepath)
+  inspect(M.state.dir_cache_object)
+  M.state.dir_cache_object.current_target = target_name
+  M.state.current_target_cache_object = M.state.dir_cache_object.targets[target_name]
 
-  M.bind_ctco()
   M.write_cache_file()
 end
 
-function M.cmake_get_target_and_run_action(name_relative_pairs, action)
-  local names = {}
-  for _, target in ipairs(name_relative_pairs) do
-    local name = target.name
-    table.insert(names, name)
-  end
-
-  -- inspect(name_relative_pairs)
-  -- inspect(names)
+function M.cmake_get_target_and_run_action(action)
+  local names = M.get_buildable_targets()
 
   if #names == 1 then
     action(names[1])
@@ -797,7 +800,6 @@ function M.cmake_get_target_and_run_action(name_relative_pairs, action)
 end
 
 function M.add_dco_target_if_new(name, target_object)
-  -- print(vim.inspect(M.get_dco("targets")))
   if M.state.dir_cache_object.targets[name] ~= nil then
     return
   end
@@ -831,8 +833,8 @@ function M.get_state(key)
 end
 
 function M.bind_ctco()
-  local ctf = M.state.dir_cache_object.current_target_file
-  M.state.current_target_cache_object = M.state.dir_cache_object.targets[ctf]
+  local ct = M.state.dir_cache_object.current_target
+  M.state.current_target_cache_object = M.state.dir_cache_object.targets[ct]
 end
 
 function M.set_state(key, value)
@@ -984,6 +986,7 @@ function M.run_lit_on_file()
 end
 
 function M.setup(opts)
+  print("SETUP")
   vim.g.cmake_last_window = nil
   vim.g.cmake_last_buffer = nil
 
