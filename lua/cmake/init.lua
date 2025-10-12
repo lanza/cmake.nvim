@@ -148,12 +148,12 @@ function M._do_build_current_target()
   M._do_build_current_target_with_completion(function() end)
 end
 
-function M.cmake_set_current_target_run_args(args)
+function M.cmake_set_current_target_run_args(run_args)
   if M.get_cmake_target_file() == nil then
     M.cmake_get_target_and_run_action(M.get_dco("name_relative_pairs"), M.update_target)
     return
   end
-  M.set_ctco("args", args)
+  M.set_ctco("args", run_args)
   M.write_cache_file()
   M.dump_current_target()
 end
@@ -178,10 +178,10 @@ function M.cmake_build_current_target_with_completion(completion)
   end)
 end
 
-function M.cmake_build_current_target(arg)
+function M.cmake_build_current_target(tool)
   local previous_build_tool = vim.g.vim_cmake_build_tool
-  if arg ~= nil then
-    vim.g.vim_cmake_build_tool = arg
+  if tool ~= nil then
+    vim.g.vim_cmake_build_tool = tool
   end
 
   M.cmake_build_current_target_with_completion(function() end)
@@ -218,6 +218,7 @@ function M._build_target_with_completion(target, completion)
     --   echo 'Your g:vim_cmake_build_tool value is invalid. Please set it to either vsplit, Makeshift, vim-dispatch or make.'
     -- endif
   else
+    print(vim.g.vim_cmake_build_tool)
     print(vim.g.vim_cmake_build_tool .. " NYI")
   end
 end
@@ -329,8 +330,12 @@ function M.toggle_file_line_column_breakpoint()
   M.toggle_breakpoint(break_string)
 end
 
+function M.get_breakpoints()
+  return M.get_ctco("breakpoints")
+end
+
 function M.toggle_breakpoint(break_string)
-  local breakpoints = M.get_ctco("breakpoints")
+  local breakpoints = M.get_breakpoints()
   if vim.fn.has_key(breakpoints, break_string) == 1 then
     breakpoints[break_string].enabled = not breakpoints[break_string].enabled
   else
@@ -345,6 +350,74 @@ end
 function M.should_break_at_main()
   local path = vim.env.HOME .. "/.config/vim_cmake/dont_break_at_main"
   return vim.fn.filereadable(path) == 0
+end
+
+function M.cmake_debug_current_target()
+  M.parse_codemodel_json_with_completion(M._do_debug_current_target)
+end
+
+function M.cmake_debug_current_target_lldb()
+  M.set_state("debugger", "lldb")
+  M.cmake_debug_current_target()
+end
+
+function M.cmake_debug_current_target_gdb()
+  M.set_state("debugger", "gdb")
+  M.cmake_debug_current_target()
+end
+
+function M.cmake_debug_current_target_nvim_dap_lldb_vscode()
+  M.set_state("debugger", "nvim_dap_lldb_vscode")
+  M.cmake_debug_current_target()
+end
+
+function M.start_lldb(job_id, exit_code, event)
+  if exit_code ~= 0 then
+    return
+  end
+
+  local commands = {}
+
+  if M.should_break_at_main() then
+    table.insert(commands, "breakpoint set --name main")
+  end
+
+  local breakpoints = M.get_breakpoints()
+  for _, breakpoint in pairs(breakpoints) do
+    if breakpoint.enabled then
+      table.insert(commands, "b " .. breakpoint.text)
+    end
+  end
+
+  table.insert(commands, "run")
+
+  local init_file = "/tmp/lldb_init_vim_cmake"
+  local _ = vim.fn.writefile(commands, init_file)
+
+  M.close_last_window_if_open()
+  M.close_last_buffer_if_open()
+
+  local lldb_init_arg = " -s " .. init_file
+
+  vim.cmd("GdbStartLLDB lldb " ..
+  M.get_cmake_target_file() .. lldb_init_arg .. " " .. " -- " .. M.get_cmake_target_args())
+end
+
+function M._do_debug_current_target()
+  if M.get_cmake_target_file() == nil then
+    M.cmake_get_target_and_run_action("BROKEN", M._update_target)
+  end
+
+  if M.get_debugger() == "gdb" then
+    M.cmake_build_current_target_with_completion(M.start_gdb)
+  elseif M.get_debugger() == "lldb" then
+    M.cmake_build_current_target_with_completion(M.start_lldb)
+  elseif M.get_debugger() == "nvim_dap_lldb_vscode" then
+    M.cmake_build_current_target_with_completion(M.start_nvim_dap_lldb_vscode)
+  else
+    print("Debugger " .. M.get_debugger() .. " not supported")
+    return
+  end
 end
 
 function M.toggle_break_at_main()
@@ -367,7 +440,7 @@ end
 
 function M.list_breakpoints()
   local breakpoint_list = {}
-  local breakpoints = M.get_ctco("breakpoints")
+  local breakpoints = M.get_breakpoints()
   print("Enabled:")
   for _, breakpoint in pairs(breakpoints) do
     if breakpoint.enabled then
@@ -599,8 +672,8 @@ function M.cmake_open_cache_file()
   vim.cmd.edit(M.get_cmake_build_dir() .. "/CMakeCache.txt")
 end
 
-function M.cmake_set_cmake_args(args)
-  M.set_dco("cmake_arguments", args)
+function M.cmake_set_cmake_args(cmake_args)
+  M.set_dco("cmake_arguments", cmake_args)
   M.write_cache_file()
 end
 
@@ -691,13 +764,13 @@ function M.cmake_clean()
   vim.fn.terminal(command)
 end
 
-function M.cmake_update_build_dir(args)
-  M.set_dco("build_dir", args)
+function M.cmake_update_build_dir(build_dir)
+  M.set_dco("build_dir", build_dir)
   M.write_cache_file()
 end
 
-function M.cmake_update_source_dir(args)
-  M.set_dco("source_dir", args)
+function M.cmake_update_source_dir(source_dir)
+  M.set_dco("source_dir", source_dir)
   M.write_cache_file()
 end
 
@@ -722,5 +795,45 @@ function M.setup(opts)
 
   M.initialize_cache_file()
 end
+
+vim.api.nvim_create_user_command("CMakeOpenCacheFile", M.cmake_open_cache_file, { nargs = 0, })
+
+vim.api.nvim_create_user_command("CMakeSetCMakeArgs", function(args) M.cmake_set_cmake_args(args.args) end,
+  { nargs = "*", })
+vim.api.nvim_create_user_command("CMakeSetBuildDir", function(args) M.cmake_update_build_dir(args.args) end,
+  { nargs = 1, complete = "dir" })
+vim.api.nvim_create_user_command("CMakeSetSourceDir", function(args) M.cmake_update_source_dir(args.args) end,
+  { nargs = 1, complete = "dir" })
+
+vim.api.nvim_create_user_command("CMakePickTarget", M.cmake_pick_target, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakePickExecutableTarget", M.cmake_pick_executable_target, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeRunCurrentTarget", M.cmake_run_current_target, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeSetCurrentTargetRunArgs",
+  function(args) M.cmake_set_current_target_run_args(args.args) end, { nargs = "*", })
+vim.api.nvim_create_user_command("CMakeBuildCurrentTarget", function(args) M.cmake_build_current_target(args.args) end,
+  { nargs = "?" })                                                                                                                       -- { nargs = "?", complete = M.get_build_tools })
+
+vim.api.nvim_create_user_command("CMakeClean", M.cmake_clean, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeBuildAll", M.cmake_build_all, { nargs = 0, })
+
+vim.api.nvim_create_user_command("CMakeCreateFile", M.cmake_create_file, { nargs = 1 })
+vim.api.nvim_create_user_command("CMakeCloseWindow", M.cmake_close_windows, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeRunLitOnFile", M.run_lit_on_file, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeLoad", M.cmake_load, { nargs = 0, })
+
+vim.api.nvim_create_user_command("CMakeConfigureAndGenerate", M.configure_and_generate, { nargs = 0, })
+
+vim.api.nvim_create_user_command("CMakeToggleFileLineColumnBreakpoint", M.toggle_file_line_column_breakpoint,
+  { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeToggleFileLineBreakpoint", M.toggle_file_line_breakpoint, { nargs = 0, })
+
+vim.api.nvim_create_user_command("CMakeListBreakpoints", M.list_breakpoints, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeToggleBreakAtMain", M.toggle_break_at_main, { nargs = 0, })
+
+vim.api.nvim_create_user_command("CMakeDebugWithNvimLLDB", M.cmake_debug_current_target_lldb, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeDebugWithNvimGDB", M.cmake_debug_current_target_gdb, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeDebugWithNvimDapLLDBVSCode", M.cmake_debug_current_target_nvim_dap_lldb_vscode,
+  { nargs = 0, })
+
 
 return M

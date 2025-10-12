@@ -95,45 +95,6 @@ function s:start_gdb(job_id, exit_code, event)
   exec l:exec
 endfunction
 
-function s:start_lldb(job_id, exit_code, event)
-  if a:exit_code != 0
-    return
-  endif
-  let l:commands = []
-
-  if v:lua.require("cmake").should_break_at_main()
-    call add(l:commands, "breakpoint set --func-regex '^main$'")
-  endif
-
-  let l:data = v:lua.require("cmake").get_cmake_cache_file()
-  if has_key(l:data, getcwd())
-    let l:breakpoints = l:data[getcwd()]["targets"][v:lua.require("cmake").get_cmake_target_file()]["breakpoints"]
-    for b in keys(l:breakpoints)
-      echom b
-      let l:bp = l:breakpoints[b]
-      if l:bp['enabled']
-        let break = 'b ' . l:bp['text']
-        call add(l:commands, break)
-      endif
-    endfor
-  endif
-
-  call add(l:commands, 'r')
-
-  let l:init_file = '/tmp/lldbinitvimcmake'
-  let l:f = writefile(l:commands, l:init_file)
-
-  call v:lua.require("cmake").close_last_window_if_open()
-  call v:lua.require("cmake").close_last_buffer_if_open()
-
-  if exists('l:init_file')
-    let l:lldb_init_arg = ' -s /tmp/lldbinitvimcmake '
-  else
-    let l:lldb_init_arg = ''
-  endif
-  exec 'GdbStartLLDB lldb ' . v:lua.require("cmake").get_cmake_target_file() . l:lldb_init_arg . ' -- ' . v:lua.require("cmake").get_cmake_target_args()
-endfunction
-
 " TODO: Fix this breakpoint handling
 function s:start_nvim_dap_lldb_vscode(job_id, exit_code, event)
   if a:exit_code != 0
@@ -170,69 +131,4 @@ function s:start_nvim_dap_lldb_vscode(job_id, exit_code, event)
   endif
   exec 'DebugLldb ' . v:lua.require("cmake").get_cmake_target_file() . ' --lldbinit ' . l:lldb_init_arg . ' -- ' . v:lua.require("cmake").get_cmake_target_args()
 endfunction
-
-function s:cmake_debug_current_target_nvim_dap_lldb_vscode()
-  echom "in dap function"
-  call v:lua.require("cmake").set_state("debugger", "nvim_dap_lldb_vscode")
-  call s:cmake_debug_current_target()
-endf
-
-function s:cmake_debug_current_target_lldb()
-  call v:lua.require("cmake").set_state("debugger", "lldb")
-  call s:cmake_debug_current_target()
-endf
-
-function s:cmake_debug_current_target_gdb()
-  call v:lua.require("cmake").set_state("debugger", "gdb")
-  call s:cmake_debug_current_target()
-endf
-
-function s:cmake_debug_current_target()
-  call v:lua.require("cmake").parse_codemodel_json_with_completion(function("s:_do_debug_current_target"))
-endfunction
-
-function s:_do_debug_current_target()
-  if v:lua.require("cmake").get_cmake_target_file() == v:null
-    call v:lua.require("cmake").cmake_get_target_and_run_action("THIS IS BROKEN", 's:update_target')
-  endif
-
-  if v:lua.require("cmake").get_debugger() ==? 'gdb'
-    call v:lua.require("cmake").cmake_build_current_target_with_completion(function('s:start_gdb'))
-  elseif v:lua.require("cmake").get_state("debugger") ==? 'lldb'
-    call v:lua.require("cmake").cmake_build_current_target_with_completion(function('s:start_lldb'))
-  else
-    call v:lua.require("cmake").cmake_build_current_target_with_completion(function('s:start_nvim_dap_lldb_vscode'))
-  endif
-endfunction
-
-command! -nargs=0 CMakeOpenCacheFile call v:lua.require("cmake").cmake_open_cache_file()
-
-command! -nargs=* -complete=shellcmd CMakeSetCMakeArgs call v:lua.require("cmake").cmake_set_cmake_args(<f-args>)
-command! -nargs=1 -complete=shellcmd CMakeSetBuildDir call v:lua.require("cmake").cmake_update_build_dir(<f-args>)
-command! -nargs=1 -complete=shellcmd CMakeSetSourceDir call v:lua.require("cmake").cmake_update_source_dir(<f-args>)
-
-command! -nargs=0 CMakePickTarget call v:lua.require("cmake").cmake_pick_target()
-command! -nargs=0 CMakePickExecutableTarget call v:lua.require("cmake").cmake_pick_executable_target()
-command! -nargs=0 CMakeRunCurrentTarget call v:lua.require("cmake").cmake_run_current_target()
-command! -nargs=* -complete=shellcmd CMakeSetCurrentTargetRunArgs call v:lua.require("cmake").cmake_set_current_target_run_args(<q-args>)
-command! -nargs=? -complete=customlist,v:lua.require("cmake").get_build_tools CMakeBuildCurrentTarget call v:lua.require("cmake").cmake_build_current_target(<f-args>)
-
-command! -nargs=1 -complete=shellcmd CMakeClean call v:lua.require("cmake").cmake_clean()
-command! -nargs=0 CMakeBuildAll call v:lua.require("cmake").cmake_build_all()
-
-command! -nargs=* -complete=shellcmd CMakeCreateFile call v:lua.require("cmake").cmake_create_file(<f-args>)
-command! -nargs=1 -complete=shellcmd CMakeCloseWindow call v:lua.require("cmake").cmake_close_windows()
-command! -nargs=0 CMakeRunLitOnFile call v:lua.require("cmake").run_lit_on_file()
-command! -nargs=0 CMakeLoad call v:lua.require("cmake").cmake_load()
-
-command! -nargs=0 CMakeConfigureAndGenerate call v:lua.require("cmake").configure_and_generate()
-
-command! -nargs=0 CMakeToggleFileLineColumnBreakpoint call v:lua.require("cmake").toggle_file_line_column_breakpoint()
-command! -nargs=0 CMakeToggleFileLineBreakpoint call v:lua.require("cmake").toggle_file_line_breakpoint()
-
-command! -nargs=0 CMakeListBreakpoints call v:lua.require("cmake").list_breakpoints()
-command! -nargs=0 CMakeToggleBreakAtMain call v:lua.require("cmake").toggle_break_at_main()
-command! -nargs=0 CMakeDebugWithNvimLLDB call s:cmake_debug_current_target_lldb()
-command! -nargs=0 CMakeDebugWithNvimGDB call s:cmake_debug_current_target_gdb()
-command! -nargs=0 CMakeDebugWithNvimDapLLDBVSCode call s:cmake_debug_current_target_nvim_dap_lldb_vscode()
 
