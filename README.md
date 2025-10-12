@@ -1,4 +1,4 @@
-A simple CMake addon for vim
+A simple CMake addon for neovim
 
 Provides these commands:
 * CMakeSetBuildDir
