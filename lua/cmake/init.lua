@@ -302,7 +302,6 @@ function M.configure_and_generate(completion)
         print("CMake configuration/generation failed")
         return
       end
-      M.parse_codemodel_json()
       _ = completion and completion()
     end
   })
@@ -318,11 +317,23 @@ function M.ensure_generated(completion)
 end
 
 ---@private
+function M.ensure_parsed(completion)
+  if #M.get_dco().targets > 0 then
+    _ = completion and completion()
+  else
+    M.ensure_generated(function()
+      M.parse_codemodel_json()
+      _ = completion and completion()
+    end)
+  end
+end
+
+---@private
 function M.ensure_selected_target(completion)
   if M.has_set_target() then
     completion()
   else
-    M.ensure_generated(function()
+    M.ensure_parsed(function()
       M.select_target(completion)
     end)
   end
