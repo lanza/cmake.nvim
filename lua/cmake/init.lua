@@ -26,7 +26,6 @@ local M = {}
 ---@field cmake_tool "cmake"
 ---@field generator "Ninja" | "Unix Makefiles"
 ---@field build_command "ninja" | "make"
----@field debugger "lldb" | "gdb" | "nvim_dap_lldb_vscode"
 ---@field extra_lit_args string
 ---@field cache_file_path string
 ---@field global_cache_object table<string, CMakeDirectory>
@@ -122,16 +121,16 @@ function M.perform_build(completion)
 
   local target = M.get_current_target_name()
 
-  if vim.g.vim_cmake_build_tool == "vsplit" then
+  if vim.g.cmake_build_tool == "vsplit" then
     local command = "cmake --build " .. M.get_build_dir() .. " --target " .. target
     ui.get_only_window()
     vim.fn.termopen(command, { on_exit = completion })
-  elseif vim.g.vim_cmake_build_tool == "vim-dispatch" then
+  elseif vim.g.cmake_build_tool == "vim-dispatch" then
     vim.o.makeprg = M.state.build_command .. " -C " .. build_dir .. " " .. target
     --   " completion not honored
     vim.cmd.Make()
   else
-    print("g:vim_cmake_build_tool value is invalid. (vsplit or vim-dispatch)")
+    print("g:cmake_build_tool value is invalid. (vsplit or vim-dispatch)")
   end
 end
 
@@ -211,7 +210,7 @@ end
 
 ---@private
 function M.should_break_at_main()
-  local path = vim.env.HOME .. "/.config/vim_cmake/dont_break_at_main"
+  local path = vim.env.HOME .. "/.config/cmake.nvim/dont_break_at_main"
   return vim.fn.filereadable(path) == 0
 end
 
@@ -406,15 +405,15 @@ end
 
 function M.cmake_build_all()
   M.ensure_generated(function()
-    if vim.g.vim_cmake_build_tool == "vsplit" then
+    if vim.g.cmake_build_tool == "vsplit" then
       local command = "cmake --build " .. M.get_build_dir()
       ui.get_only_window()
       vim.fn.termopen(command)
-    elseif vim.g.vim_cmake_build_tool == "vim-dispatch" then
+    elseif vim.g.cmake_build_tool == "vim-dispatch" then
       local cwd = vim.fn.getcwd()
       vim.o.makeprg = M.state.build_command .. " -C " .. cwd .. "/" .. M.get_build_dir()
     else
-      print("vim.g.vim_cmake_build_tool value is invalid (vsplit or vim-dispatch)")
+      print("vim.g.cmake_build_tool value is invalid (vsplit or vim-dispatch)")
     end
   end)
 end
@@ -437,13 +436,13 @@ function M.cmake_set_cmake_args(cmake_args)
 end
 
 function M.cmake_build_current_target(tool)
-  local previous_build_tool = vim.g.vim_cmake_build_tool
+  local previous_build_tool = vim.g.cmake_build_tool
   if tool ~= nil and tool ~= "" then
-    vim.g.vim_cmake_build_tool = tool
+    vim.g.cmake_build_tool = tool
   end
 
   M.ensure_built_current_target(function()
-    vim.g.vim_cmake_build_tool = previous_build_tool
+    vim.g.cmake_build_tool = previous_build_tool
   end)
 end
 
@@ -471,7 +470,7 @@ function M.cmake_toggle_file_line_column_breakpoint()
 end
 
 function M.cmake_debug_current_target_gdb()
-  vim.g.vim_cmake_build_tool = "vsplit"
+  vim.g.cmake_build_tool = "vsplit"
   M.ensure_built_current_target(function(job_id, exit_code, event)
     M.start_debugger({
       debugger = "gdb",
@@ -485,7 +484,7 @@ function M.cmake_debug_current_target_gdb()
 end
 
 function M.cmake_debug_current_target_nvim_dap_lldb_vscode()
-  vim.g.vim_cmake_build_tool = "vsplit"
+  vim.g.cmake_build_tool = "vsplit"
   M.ensure_built_current_target(function(job_id, exit_code, event)
     M.start_debugger({
       debugger = "nvim_dap_lldb_vscode",
@@ -499,7 +498,7 @@ function M.cmake_debug_current_target_nvim_dap_lldb_vscode()
 end
 
 function M.cmake_debug_current_target_lldb()
-  vim.g.vim_cmake_build_tool = "vsplit"
+  vim.g.cmake_build_tool = "vsplit"
   M.ensure_built_current_target(function(job_id, exit_code, event)
     M.start_debugger({
       debugger = "lldb",
@@ -513,7 +512,7 @@ function M.cmake_debug_current_target_lldb()
 end
 
 function M.cmake_toggle_break_at_main()
-  local path = vim.env.HOME .. "/.config/vim_cmake/dont_break_at_main"
+  local path = vim.env.HOME .. "/.config/cmake.nvim/dont_break_at_main"
   if vim.fn.filereadable(path) == 1 then
     vim.fn.delete(path)
     return
@@ -523,9 +522,9 @@ function M.cmake_toggle_break_at_main()
   if vim.fn.isdirectory(config) == 0 then
     vim.fn.mkdir(config)
   end
-  local vim_cmake = config .. "/vim_cmake"
-  if vim.fn.isdirectory(vim_cmake) == 0 then
-    vim.fn.mkdir(vim_cmake)
+  local cmake_nvim = config .. "/cmake.nvim"
+  if vim.fn.isdirectory(cmake_nvim) == 0 then
+    vim.fn.mkdir(cmake_nvim)
   end
   vim.fn.writefile({ " " }, path)
 end
@@ -551,8 +550,8 @@ end
 
 function M.cmake_run_current_target()
   M.ensure_built_current_target(function()
-    if vim.g.vim_cmake_build_tool ~= "vsplit" then
-      vim.g.vim_cmake_build_tool = "vsplit"
+    if vim.g.cmake_build_tool ~= "vsplit" then
+      vim.g.cmake_build_tool = "vsplit"
     end
     ui.close_last_window_if_open()
     ui.close_last_buffer_if_open()
@@ -686,8 +685,7 @@ function M.initialize_cache_file()
   local template_file = vim.g.cmake_template_file or vim.fn.expand(":p:h:h" .. "/CMakeLists.txt")
   local default_build_dir = vim.g.cmake_default_build_dir or "build"
   local extra_lit_args = vim.g.cmake_extra_lit_args or "-a"
-  local debugger = vim.g.vim_cmake_debugger or "lldb"
-  local cache_file_path = vim.g.cmake_cache_file_path or vim.env.HOME .. "/.vim_cmake.json"
+  local cache_file_path = vim.g.cmake_cache_file_path or vim.env.HOME .. "/.cmake.nvim.json"
 
   local global_cache_object = (function()
     if vim.fn.filereadable(cache_file_path) == 0 then
@@ -715,7 +713,6 @@ function M.initialize_cache_file()
     cmake_tool = "cmake",
     generator = "Ninja",
     build_command = "ninja",
-    debugger = debugger,
     extra_lit_args = extra_lit_args,
     cache_file_path = cache_file_path,
     global_cache_object = global_cache_object,
@@ -730,8 +727,8 @@ end
 function M.setup(opts)
   ui.setup(opts)
 
-  if not vim.g.vim_cmake_build_tool then
-    vim.g.vim_cmake_build_tool = 'vsplit'
+  if not vim.g.cmake_build_tool then
+    vim.g.cmake_build_tool = 'vsplit'
   end
 
   M.initialize_cache_file()
