@@ -580,7 +580,9 @@ function M.cmake_run_current_target()
     end
     ui.get_only_window()
     local target_file = M.get_current_target_file()
-    vim.cmd.terminal(target_file .. " " .. M.get_current_target_run_args())
+    vim.fn.jobstart(target_file .. " " .. M.get_current_target_run_args(), {
+      term = true,
+    })
   end)
 end
 
