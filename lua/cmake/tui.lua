@@ -9,10 +9,22 @@ M.winid = nil
 -- track which targets are expanded
 M.expanded = {}
 
+function M.is_open()
+  return M.winid and api.nvim_win_is_valid(M.winid)
+end
+
+function M.toggle()
+  if M.is_open() then
+    M.close()
+  else
+    M.open()
+  end
+end
+
 -- Open the CMake TUI panel on the left side
 function M.open()
   -- if already open, just focus
-  if M.winid and api.nvim_win_is_valid(M.winid) then
+  if M.is_open() then
     api.nvim_set_current_win(M.winid)
     return
   end
@@ -52,7 +64,7 @@ end
 
 -- Close the panel
 function M.close()
-  if M.winid and api.nvim_win_is_valid(M.winid) then
+  if M.is_open() then
     api.nvim_win_close(M.winid, true)
   end
   if M.bufnr and api.nvim_buf_is_valid(M.bufnr) then
@@ -64,7 +76,7 @@ function M.close()
 end
 
 -- Toggle expansion of target under cursor
-function M.toggle()
+function M.toggle_target()
   if not (M.bufnr and api.nvim_win_is_valid(M.winid)) then
     return
   end
