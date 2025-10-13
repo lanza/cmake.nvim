@@ -560,7 +560,7 @@ function M.cmake_run_current_target()
 end
 
 function M.cmake_configure_and_generate()
-  M.ensure_generated()
+  M.configure_and_generate()
 end
 
 function M.cmake_edit_run_args()
