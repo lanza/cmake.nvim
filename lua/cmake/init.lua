@@ -414,7 +414,7 @@ function M.select_executable_target()
 end
 
 function M.cmake_build_all()
-  M.ensure_generated(function()
+  M.ensure_parsed(function()
     if vim.g.cmake_build_tool == "vsplit" then
       local command = "cmake --build " .. M.get_build_dir()
       ui.get_only_window()
@@ -429,11 +429,11 @@ function M.cmake_build_all()
 end
 
 function M.cmake_pick_target()
-  M.ensure_generated(M.select_target)
+  M.ensure_parsed(M.select_target)
 end
 
 function M.cmake_pick_executable_target()
-  M.ensure_generated(M.select_executable_target)
+  M.ensure_parsed(M.select_executable_target)
 end
 
 function M.cmake_open_cache_file()
