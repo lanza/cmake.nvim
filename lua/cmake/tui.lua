@@ -51,14 +51,11 @@ function M.open()
   api.nvim_win_set_option(M.winid, 'cursorline', true)
   api.nvim_win_set_option(M.winid, 'number', false)
   api.nvim_win_set_option(M.winid, 'relativenumber', false)
-  -- keymaps
-  api.nvim_buf_set_keymap(M.bufnr, 'n', '<CR>',
-    '<cmd>lua require("cmake.tui").toggle()<CR>',
-    { noremap = true, silent = true })
-  api.nvim_buf_set_keymap(M.bufnr, 'n', 'q',
-    '<cmd>lua require("cmake.tui").close()<CR>',
-    { noremap = true, silent = true })
-  -- initial render
+
+
+  vim.keymap.set("n", "<CR>", M.toggle_target, { noremap = true, silent = true, buffer = M.bufnr })
+  vim.keymap.set("n", "q", M.close, { noremap = true, silent = true, buffer = M.bufnr })
+
   M.render()
 end
 
