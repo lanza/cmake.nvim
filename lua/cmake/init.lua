@@ -571,12 +571,11 @@ function M.cmake_list_breakpoints()
 end
 
 function M.cmake_run_current_target()
+  save_build_tool()
   M.ensure_built_current_target(function()
-    if vim.g.cmake_build_tool ~= "vsplit" then
-      vim.g.cmake_build_tool = "vsplit"
-    end
     ui.close_last_window_if_open()
     ui.close_last_buffer_if_open()
+    restore_build_tool()
     local target_file = M.get_current_target_file()
     vim.cmd.terminal(target_file .. " " .. M.get_current_target_run_args())
   end)
