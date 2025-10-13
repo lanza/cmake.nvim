@@ -572,8 +572,12 @@ end
 
 function M.cmake_run_current_target()
   save_build_tool()
-  M.ensure_built_current_target(function()
+  M.ensure_built_current_target(function(_, exit_code, _)
     restore_build_tool()
+    if exit_code ~= 0 then
+      print("Build failed, not running")
+      return
+    end
     ui.get_only_window()
     local target_file = M.get_current_target_file()
     vim.cmd.terminal(target_file .. " " .. M.get_current_target_run_args())
