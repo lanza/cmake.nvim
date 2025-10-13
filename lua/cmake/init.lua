@@ -351,7 +351,7 @@ function M.set_current_target(target_name)
   assert(target_name ~= "", "Invalid target to select_target")
 
   local dco = M.get_dco()
-  dco.current_target = target_name
+  dco.current_target_name = target_name
   M.state.current_target_cache_object = dco.targets[target_name]
 
   M.write_cache_file()
