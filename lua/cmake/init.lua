@@ -266,7 +266,7 @@ function M.parse_codemodel_json()
 
       local filepath = M.state.dir_cache_object.build_dir .. "/" .. relative_path
 
-      M.state.dir_cache_object.targets[name] = {
+      M.get_dco().targets[name] = {
         current_target_file = filepath,
         current_target_relative = relative_path,
         current_target_name = name,
@@ -275,7 +275,7 @@ function M.parse_codemodel_json()
         is_exec = is_exec,
       }
     else
-      M.state.dir_cache_object.phoney_targets[name] = {
+      M.get_dco().phoney_targets[name] = {
         name = name,
       }
     end
@@ -289,7 +289,6 @@ function M.configure_and_generate(completion)
   if vim.fn.filereadable(M.get_source_dir() .. "/CMakeLists.txt") == 0 then
     if vim.g.cmake_template_file ~= nil then
       vim.fn.filecopy(vim.g.cmake_template_file, M.get_source_dir() .. "/CMakeLists.txt")
-      vim.cmd("!cp " .. vim.g.cmake_template_file .. " " .. M.get_source_dir() .. "/CMakeLists.txt")
     else
       print("Could not find a CMakeLists at directory " .. M.get_cmake_source_dir())
     end
