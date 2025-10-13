@@ -46,6 +46,18 @@ local function is_absolute_path(path)
 end
 
 ---@private
+local function save_build_tool(tool)
+  vim.g.saved_cmake_build_tool = vim.g.cmake_build_tool
+  vim.g.cmake_build_tool = tool or "vsplit"
+end
+
+---@private
+local function restore_build_tool()
+  vim.g.cmake_build_tool = vim.g.saved_cmake_build_tool
+  vim.g.saved_cmake_build_tool = nil
+end
+
+---@private
 function M.get_dco()
   return M.state.dir_cache_object
 end
@@ -446,13 +458,10 @@ function M.cmake_set_cmake_args(cmake_args)
 end
 
 function M.cmake_build_current_target(tool)
-  local previous_build_tool = vim.g.cmake_build_tool
-  if tool ~= nil and tool ~= "" then
-    vim.g.cmake_build_tool = tool
-  end
+  save_build_tool(tool)
 
   M.ensure_built_current_target(function()
-    vim.g.cmake_build_tool = previous_build_tool
+    restore_build_tool()
   end)
 end
 
@@ -480,8 +489,9 @@ function M.cmake_toggle_file_line_column_breakpoint()
 end
 
 function M.cmake_debug_current_target_gdb()
-  vim.g.cmake_build_tool = "vsplit"
+  save_build_tool()
   M.ensure_built_current_target(function(job_id, exit_code, event)
+    restore_build_tool()
     M.start_debugger({
       debugger = "gdb",
       main_breakpoint = "b main",
@@ -494,8 +504,9 @@ function M.cmake_debug_current_target_gdb()
 end
 
 function M.cmake_debug_current_target_nvim_dap_lldb_vscode()
-  vim.g.cmake_build_tool = "vsplit"
+  save_build_tool()
   M.ensure_built_current_target(function(job_id, exit_code, event)
+    restore_build_tool()
     M.start_debugger({
       debugger = "nvim_dap_lldb_vscode",
       main_breakpoint = "breakpoint set --name main",
@@ -508,8 +519,9 @@ function M.cmake_debug_current_target_nvim_dap_lldb_vscode()
 end
 
 function M.cmake_debug_current_target_lldb()
-  vim.g.cmake_build_tool = "vsplit"
+  save_build_tool()
   M.ensure_built_current_target(function(job_id, exit_code, event)
+    restore_build_tool()
     M.start_debugger({
       debugger = "lldb",
       main_breakpoint = "breakpoint set --name main",
