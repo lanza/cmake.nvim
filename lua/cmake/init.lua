@@ -288,8 +288,8 @@ end
 ---@private
 function M.configure_and_generate(completion)
   if vim.fn.filereadable(M.get_source_dir() .. "/CMakeLists.txt") == 0 then
-    print("missing cmakelists.txt NYI")
     if vim.g.cmake_template_file ~= nil then
+      vim.fn.filecopy(vim.g.cmake_template_file, M.get_source_dir() .. "/CMakeLists.txt")
       vim.cmd("!cp " .. vim.g.cmake_template_file .. " " .. M.get_source_dir() .. "/CMakeLists.txt")
     else
       print("Could not find a CMakeLists at directory " .. M.get_cmake_source_dir())
@@ -299,7 +299,11 @@ function M.configure_and_generate(completion)
   local command = M.state.cmake_tool .. " " .. M.get_cmake_argument_string()
   ui.get_only_window()
   vim.fn.termopen(vim.fn.split(command), {
-    on_exit = function()
+    on_exit = function(_, exit_code, _)
+      if exit_code ~= 0 then
+        print("CMake configuration/generation failed")
+        return
+      end
       M.parse_codemodel_json()
       _ = completion and completion()
     end
@@ -488,7 +492,7 @@ function M.cmake_debug_current_target_nvim_dap_lldb_vscode()
       main_breakpoint = "breakpoint set --name main",
       run_command = "run",
       command_builder = function(init_file, target_file, run_args)
-        return "Debuglldb " .. target_file .. " --lldbinit " .. init_file .. " -- " .. run_args
+        return "DebugLldb " .. target_file .. " --lldbinit " .. init_file .. " -- " .. run_args
       end,
     }, job_id, exit_code, event)
   end)
