@@ -206,6 +206,15 @@ function M.get_breakpoints()
   return M.get_ctco().breakpoints
 end
 
+function M.enable_breakpoint(break_string)
+  local breakpoints = M.get_breakpoints()
+  breakpoints[break_string] = {
+    text = break_string,
+    enabled = true,
+  }
+  M.write_cache_file()
+end
+
 ---@private
 function M.toggle_breakpoint(break_string)
   local breakpoints = M.get_breakpoints()
