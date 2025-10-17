@@ -116,7 +116,7 @@ function M.has_query_reply()
   local codemodel_path = vim.env.PWD .. "/" .. build_dir .. ".cmake/api/v1/reply/"
   return #vim.fs.find(function(name, _)
     return name:match("codemodel*")
-  end, { path = codemodel_path })
+  end, { path = codemodel_path }) > 0
 end
 
 ---@private
