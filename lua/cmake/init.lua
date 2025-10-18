@@ -298,6 +298,7 @@ function M.parse_codemodel_json()
         args = "",
         breakpoints = {},
         is_exec = is_exec,
+        target_type = target_file_data.type,
       }
     else
       M.get_dco().phoney_targets[name] = {

@@ -31,3 +31,7 @@ Set `g:cmake_auto_sync_compile_commands = true` to copy or link the `compile_com
 from the active build directory into the source tree after configure/generate. Override
 the behavior with `g:cmake_compile_commands_sync_method = "copy"` if symlinks are not
 desirable.
+
+Use `:lua require('cmake.tui').toggle()` to open the target browser. Filter targets with
+`f`/`F` to cycle or `a`/`e`/`l`/`t` for direct selection, and trigger actions on the
+highlighted target with `b` (build), `r` (run), or `d` (debug).
