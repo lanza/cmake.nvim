@@ -4,6 +4,9 @@ local api = vim.api
 
 local M = {}
 
+local ns = api.nvim_create_namespace('cmake_tui')
+local highlight_initialized = false
+
 -- buffer and window handles
 M.bufnr = nil
 M.winid = nil
@@ -12,6 +15,111 @@ M.expanded = {}
 
 local function target_name_from_line(line)
   return extras.extract_target_name(line or "")
+end
+
+local function set_default_hl(name, opts)
+  opts = vim.tbl_extend(
+    "force",
+    { default = true },
+    opts or {}
+  )
+  api.nvim_set_hl(0, name, opts)
+end
+
+local function ensure_highlights()
+  if highlight_initialized then
+    return
+  end
+  set_default_hl("CMakeTuiFilter", { link = "Title" })
+  set_default_hl("CMakeTuiActions", { link = "Comment" })
+  set_default_hl("CMakeTuiArrow", { link = "Boolean" })
+  set_default_hl("CMakeTuiBadgeExecutable", { link = "Function" })
+  set_default_hl("CMakeTuiBadgeLibrary", { link = "Type" })
+  set_default_hl("CMakeTuiBadgeTest", { link = "DiagnosticWarn" })
+  set_default_hl("CMakeTuiBadgeOther", { link = "Identifier" })
+  set_default_hl("CMakeTuiTarget", { link = "String" })
+  set_default_hl("CMakeTuiDetailKey", { link = "Statement" })
+  set_default_hl("CMakeTuiMuted", { link = "Comment" })
+  highlight_initialized = true
+end
+
+local badge_highlights = {
+  EXE = "CMakeTuiBadgeExecutable",
+  LIB = "CMakeTuiBadgeLibrary",
+  TST = "CMakeTuiBadgeTest",
+  OTH = "CMakeTuiBadgeOther",
+}
+
+local function highlight_target_row(line, row)
+  api.nvim_buf_add_highlight(M.bufnr, ns, "CMakeTuiArrow", row, 0, 1)
+  local badge_start, badge_end = line:find("%b[]")
+  if badge_start and badge_end then
+    local badge_name = line:sub(badge_start + 1, badge_end - 1)
+    local group = badge_highlights[badge_name] or "CMakeTuiBadgeOther"
+    api.nvim_buf_add_highlight(
+      M.bufnr,
+      ns,
+      group,
+      row,
+      badge_start - 1,
+      badge_end
+    )
+    local after = badge_end + 2
+    if after <= #line then
+      api.nvim_buf_add_highlight(
+        M.bufnr,
+        ns,
+        "CMakeTuiTarget",
+        row,
+        after - 1,
+        -1
+      )
+    end
+  end
+end
+
+local function highlight_detail_row(line, row)
+  local first = line:find("%S")
+  if not first then
+    return
+  end
+  local colon = line:find(":", first)
+  if not colon then
+    return
+  end
+  api.nvim_buf_add_highlight(
+    M.bufnr,
+    ns,
+    "CMakeTuiDetailKey",
+    row,
+    first - 1,
+    colon - 1
+  )
+end
+
+local function apply_highlights(lines)
+  if not (M.bufnr and api.nvim_buf_is_valid(M.bufnr)) then
+    return
+  end
+  ensure_highlights()
+  api.nvim_buf_clear_namespace(M.bufnr, ns, 0, -1)
+  for index, line in ipairs(lines) do
+    local row = index - 1
+    if vim.startswith(line, "Filter:") then
+      api.nvim_buf_add_highlight(M.bufnr, ns, "CMakeTuiFilter", row, 0, -1)
+    elseif vim.startswith(line, "Actions:") then
+      api.nvim_buf_add_highlight(M.bufnr, ns, "CMakeTuiActions", row, 0, -1)
+    elseif vim.startswith(line, "  No targets") then
+      api.nvim_buf_add_highlight(M.bufnr, ns, "CMakeTuiMuted", row, 0, -1)
+    else
+      local first = line:sub(1, 1)
+      if first == "▼" or first == "▶" then
+        highlight_target_row(line, row)
+      elseif line:match("^%s+%S") then
+        highlight_detail_row(line, row)
+      end
+    end
+  end
 end
 
 local function find_target_under_cursor()
@@ -75,8 +183,8 @@ function M.open()
   api.nvim_win_set_buf(M.winid, M.bufnr)
   -- resize to desired width
   vim.cmd('vertical resize ' .. width)
-  -- set a non-selectable header via the winbar to indicate this is the CMake TUI
-  -- use pcall in case winbar not supported
+  -- show a non-selectable header via the winbar so the pane is easy to spot
+  -- use pcall in case winbar is not supported
   pcall(api.nvim_win_set_option, M.winid, 'winbar', ' CMake Targets ')
   -- buffer options
   api.nvim_buf_set_option(M.bufnr, 'bufhidden', 'wipe')
@@ -187,6 +295,7 @@ function M.render()
   api.nvim_buf_set_option(M.bufnr, 'modifiable', true)
   api.nvim_buf_set_lines(M.bufnr, 0, -1, false, lines)
   api.nvim_buf_set_option(M.bufnr, 'modifiable', false)
+  apply_highlights(lines)
   -- ensure cursor in bounds
   if M.winid and api.nvim_win_is_valid(M.winid) then
     local cursor = api.nvim_win_get_cursor(M.winid)
