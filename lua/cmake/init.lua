@@ -292,11 +292,20 @@ function M.start_debugger(config, job_id, exit_code, event)
   vim.cmd(config.command_builder(init_file, M.get_current_target_file(), M.get_current_target_run_args()))
 end
 
+---@parm dir string
+---@parm pattern string
+---@return string[]
+local function globpath(dir, pattern)
+  return vim.fs.find(function(name, _)
+    return name:match(pattern)
+  end, { path = dir })
+end
+
 ---@private
 function M.parse_codemodel_json()
   local build_dir = M.get_build_dir()
   local cmake_query_response_dir = build_dir .. "/.cmake/api/v1/reply/"
-  local codemodel_file = vim.fn.globpath(cmake_query_response_dir, "codemodel*")
+  local codemodel_file = globpath(cmake_query_response_dir, "codemodel*")[1]
 
   assert(codemodel_file ~= nil, "Query reply should be set when calling parse_codemodel_json")
 
