@@ -1,0 +1,35 @@
+#+TITLE: TUI Revamp Ideas
+
+* Highlight Polish
+** Add better highlighting of the TUI
+   Introduce dedicated highlight groups so list rows, badges, and inline
+   metadata read clearly across dark and light themes.
+** Visual hierarchy
+   Use toned-down colors for inactive targets and distinct foregrounds for
+   configure/build/test states to guide the eye toward current activity.
+** Theme adaptability
+   Respect =vim.o.background=, expose a =tui.theme= option, and let users
+   override highlight groups for custom palettes.
+
+* Layout Improvements
+** Segmented layout
+   Split the window into a headline bar, scrollable target grid, and contextual
+   detail pane so users can skim targets and inspect details without leaving
+   the view.
+** Context panel
+   Surface the selected target’s commands, last exit code, timing, and artifact
+   paths, plus quick toggles for =args=, =env=, and =cwd=.
+** Compact notifications
+   Replace verbose log lines with toast-style overlays inside the TUI, expanding
+   with a single keypress when the full log is needed.
+
+* Interaction Enhancements
+** Iconography with fallbacks
+   Render Nerd Font glyphs for build/test/debug actions and fall back to ASCII
+   with aligned columns when glyphs are unavailable.
+** Interactive key hints
+   Keep a footer ribbon of dynamic keybinds (e.g. =b= build, =r= run, =d= debug,
+   =/= filter) and update it as focus changes for discoverability.
+** Real-time progress bars
+   Show inline ASCII progress bars or spinners during long builds/tests, along
+   with timestamps and elapsed time readouts.
