@@ -26,6 +26,9 @@ Provides these commands:
 * CMDBConfigureAndGenerate
 * CMakeBreakpoints
 * CMakeSyncCompileCommands
+* CMakeRunTests
+* CMakeRerunFailedTests
+* CMakeShowDiagnostics
 
 Set `g:cmake_auto_sync_compile_commands = true` to copy or link the `compile_commands.json`
 from the active build directory into the source tree after configure/generate. Override
@@ -35,3 +38,16 @@ desirable.
 Use `:lua require('cmake.tui').toggle()` to open the target browser. Filter targets with
 `f`/`F` to cycle or `a`/`e`/`l`/`t` for direct selection, and trigger actions on the
 highlighted target with `b` (build), `r` (run), or `d` (debug).
+
+Surface build/configure progress in your statusline via
+`%{v:lua.require('cmake').statusline()}`, and watch for inline virtual-text updates on the
+active buffer as commands complete.
+
+Run the project's CTest suite with `:CMakeRunTests`; failures populate the quickfix list
+and are highlighted in the statusline. Use `:CMakeRerunFailedTests` to retry only the most
+recently failing cases (leveraging `ctest --rerun-failed`). Configure the executable and
+extra arguments with `g:cmake_ctest_executable` and `g:cmake_ctest_args` if needed.
+
+Inspect the most recent build's diagnostics with `:CMakeShowDiagnostics`. Detected GCC
+/ Clang / MSVC-style errors and warnings are listed alongside a tail of the raw log, and
+errors populate the quickfix list automatically when present.

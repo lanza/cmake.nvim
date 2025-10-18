@@ -1,5 +1,8 @@
 local ui = require("cmake.ui")
 local compile_commands = require("cmake.compile_commands")
+local status = require("cmake.status")
+local test_runner = require("cmake.test_runner")
+local diagnostics = require("cmake.diagnostics")
 
 local M = {}
 
@@ -136,17 +139,36 @@ function M.perform_build(completion)
   end
 
   local target = M.get_current_target_name()
+  status.build_started(target)
 
   if vim.g.cmake_build_tool == "vsplit" then
     local command = "cmake --build " .. M.get_build_dir() .. " --target " .. target
     ui.get_only_window()
-    vim.fn.termopen(command, { on_exit = completion })
+    local capture = diagnostics.start_capture({
+      target = target,
+      build_dir = M.get_build_dir(),
+    })
+    vim.fn.termopen(command, {
+      on_stdout = capture.stdout,
+      on_stderr = capture.stderr,
+      on_exit = function(job_id, exit_code, event)
+        if capture.finish then
+          capture.finish(exit_code)
+        end
+        status.build_finished(exit_code == 0)
+        if completion then
+          completion(job_id, exit_code, event)
+        end
+      end,
+    })
   elseif vim.g.cmake_build_tool == "vim-dispatch" then
     vim.o.makeprg = M.state.build_command .. " -C " .. build_dir .. " " .. target
     --   " completion not honored
     vim.cmd.Make()
+    status.build_dispatched(target)
   else
     print("g:cmake_build_tool value is invalid. (vsplit or vim-dispatch)")
+    status.build_finished(false, "(invalid build tool)")
   end
 end
 
@@ -312,6 +334,7 @@ end
 
 ---@private
 function M.configure_and_generate(completion)
+  status.configure_started("configure")
   if vim.fn.filereadable(M.get_source_dir() .. "/CMakeLists.txt") == 0 then
     if vim.g.cmake_template_file ~= nil then
       vim.fn.filecopy(vim.g.cmake_template_file, M.get_source_dir() .. "/CMakeLists.txt")
@@ -326,8 +349,10 @@ function M.configure_and_generate(completion)
     on_exit = function(_, exit_code, _)
       if exit_code ~= 0 then
         print("CMake configuration/generation failed")
+        status.configure_finished(false)
         return
       end
+      status.configure_finished(true)
       compile_commands.auto_sync(M.get_build_dir(), M.get_source_dir())
       _ = completion and completion()
     end
@@ -609,6 +634,26 @@ function M.cmake_sync_compile_commands()
   compile_commands.sync(M.get_build_dir(), M.get_source_dir())
 end
 
+function M.cmake_run_tests()
+  M.ensure_generated(function()
+    test_runner.run_all({
+      build_dir = M.get_build_dir(),
+    })
+  end)
+end
+
+function M.cmake_rerun_failed_tests()
+  M.ensure_generated(function()
+    test_runner.rerun_failed({
+      build_dir = M.get_build_dir(),
+    })
+  end)
+end
+
+function M.cmake_show_diagnostics()
+  diagnostics.show()
+end
+
 function M.cmake_edit_run_args()
   M.ensure_selected_target(function()
     vim.ui.input({
@@ -798,6 +843,9 @@ vim.api.nvim_create_user_command("CMakeBuildCurrentTarget", function(args) M.cma
 
 vim.api.nvim_create_user_command("CMakeClean", M.cmake_clean, { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeBuildAll", M.cmake_build_all, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeRunTests", M.cmake_run_tests, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeRerunFailedTests", M.cmake_rerun_failed_tests, { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeShowDiagnostics", M.cmake_show_diagnostics, { nargs = 0, })
 
 vim.api.nvim_create_user_command("CMakeCreateFile", M.cmake_create_file, { nargs = 1 })
 vim.api.nvim_create_user_command("CMakeCloseWindow", ui.cmake_close_windows, { nargs = 0, })
@@ -818,6 +866,11 @@ vim.api.nvim_create_user_command("CMakeDebugWithNvimGDB", M.cmake_debug_current_
 vim.api.nvim_create_user_command("CMakeDebugWithNvimDapLLDBVSCode", M.cmake_debug_current_target_nvim_dap_lldb_vscode,
   { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeSyncCompileCommands", M.cmake_sync_compile_commands, { nargs = 0, })
+
+
+function M.statusline()
+  return status.statusline()
+end
 
 
 return M
