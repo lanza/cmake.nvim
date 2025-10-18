@@ -25,3 +25,9 @@ Provides these commands:
 * CMakeConfigureAndGenerate
 * CMDBConfigureAndGenerate
 * CMakeBreakpoints
+* CMakeSyncCompileCommands
+
+Set `g:cmake_auto_sync_compile_commands = true` to copy or link the `compile_commands.json`
+from the active build directory into the source tree after configure/generate. Override
+the behavior with `g:cmake_compile_commands_sync_method = "copy"` if symlinks are not
+desirable.

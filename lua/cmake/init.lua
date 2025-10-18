@@ -1,4 +1,5 @@
 local ui = require("cmake.ui")
+local compile_commands = require("cmake.compile_commands")
 
 local M = {}
 
@@ -326,6 +327,7 @@ function M.configure_and_generate(completion)
         print("CMake configuration/generation failed")
         return
       end
+      compile_commands.auto_sync(M.get_build_dir(), M.get_source_dir())
       _ = completion and completion()
     end
   })
@@ -602,6 +604,10 @@ function M.cmake_configure_and_generate()
   M.configure_and_generate()
 end
 
+function M.cmake_sync_compile_commands()
+  compile_commands.sync(M.get_build_dir(), M.get_source_dir())
+end
+
 function M.cmake_edit_run_args()
   M.ensure_selected_target(function()
     vim.ui.input({
@@ -810,6 +816,7 @@ vim.api.nvim_create_user_command("CMakeDebugWithNvimLLDB", M.cmake_debug_current
 vim.api.nvim_create_user_command("CMakeDebugWithNvimGDB", M.cmake_debug_current_target_gdb, { nargs = 0, })
 vim.api.nvim_create_user_command("CMakeDebugWithNvimDapLLDBVSCode", M.cmake_debug_current_target_nvim_dap_lldb_vscode,
   { nargs = 0, })
+vim.api.nvim_create_user_command("CMakeSyncCompileCommands", M.cmake_sync_compile_commands, { nargs = 0, })
 
 
 return M
