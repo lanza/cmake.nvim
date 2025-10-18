@@ -508,7 +508,13 @@ function M.ensure_selected_target(completion)
     completion()
   else
     M.ensure_parsed(function()
-      M.select_target(completion)
+      M.select_target(function(target_name)
+        if not M.get_ctco() then
+          print("Could not select target")
+        else
+          _ = completion and completion(target_name)
+        end
+      end)
     end)
   end
 end
@@ -552,6 +558,9 @@ function M.select_target(action)
   else
     vim.o.makeprg = M.state.build_command
     vim.ui.select(names, { prompt = 'Select Target:' }, function(target_name)
+      if not target_name then
+        return
+      end
       M.set_current_target(target_name)
       M.dump_current_target()
       _ = action and action(target_name)
@@ -993,6 +1002,5 @@ vim.api.nvim_create_user_command("CMakeSyncCompileCommands", M.cmake_sync_compil
 function M.statusline()
   return status.statusline()
 end
-
 
 return M
