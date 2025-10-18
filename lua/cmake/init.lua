@@ -922,12 +922,12 @@ function M.initialize_cache_file()
       source_dir = ".",
       targets = {},
       phoney_targets = {},
-      current_target = nil,
+      current_target_name = nil,
     }
   end
   local dir_cache_object = global_cache_object[cwd]
 
-  local current_target_cache_object = dir_cache_object.targets[dir_cache_object.current_target]
+  local current_target_cache_object = dir_cache_object.targets[dir_cache_object.current_target_name]
 
   M.state = {
     template_file = template_file,
@@ -941,7 +941,7 @@ function M.initialize_cache_file()
     current_target_cache_object = current_target_cache_object,
   }
 
-  local ct = M.state.dir_cache_object.current_target
+  local ct = M.state.dir_cache_object.current_target_name
   M.state.current_target_cache_object = M.state.dir_cache_object.targets[ct]
 end
 
