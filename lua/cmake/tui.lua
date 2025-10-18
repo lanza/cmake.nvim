@@ -40,6 +40,9 @@ local function ensure_highlights()
   set_default_hl("CMakeTuiTarget", { link = "String" })
   set_default_hl("CMakeTuiDetailKey", { link = "Statement" })
   set_default_hl("CMakeTuiMuted", { link = "Comment" })
+  set_default_hl("CMakeTuiKeyHint", { link = "DiagnosticHint" })
+  set_default_hl("CMakeTuiDetailValue", { link = "Normal" })
+  set_default_hl("CMakeTuiDetailBullet", { link = "Special" })
   highlight_initialized = true
 end
 
@@ -95,6 +98,76 @@ local function highlight_detail_row(line, row)
     first - 1,
     colon - 1
   )
+  local value_start = colon + 2
+  if value_start <= #line then
+    api.nvim_buf_add_highlight(
+      M.bufnr,
+      ns,
+      "CMakeTuiDetailValue",
+      row,
+      value_start - 1,
+      -1
+    )
+  end
+end
+
+local function highlight_detail_bullet(line, row)
+  local dash = line:find("%-")
+  if not dash then
+    return
+  end
+  api.nvim_buf_add_highlight(
+    M.bufnr,
+    ns,
+    "CMakeTuiDetailBullet",
+    row,
+    dash - 1,
+    dash
+  )
+  api.nvim_buf_add_highlight(
+    M.bufnr,
+    ns,
+    "CMakeTuiDetailValue",
+    row,
+    dash,
+    -1
+  )
+end
+
+local function highlight_key_hints(line, row)
+  local idx = 1
+  while true do
+    local start_pos, end_pos = line:find("<[^>]+>", idx)
+    if not start_pos then
+      break
+    end
+    api.nvim_buf_add_highlight(
+      M.bufnr,
+      ns,
+      "CMakeTuiKeyHint",
+      row,
+      start_pos - 1,
+      end_pos
+    )
+    idx = end_pos + 1
+  end
+  for i = 1, #line do
+    local char = line:sub(i, i)
+    if char:match("%a") then
+      local prev = i == 1 and " " or line:sub(i - 1, i - 1)
+      local next_char = i == #line and " " or line:sub(i + 1, i + 1)
+      if prev:match("[%s(,]") and next_char:match("[%s,)]") then
+        api.nvim_buf_add_highlight(
+          M.bufnr,
+          ns,
+          "CMakeTuiKeyHint",
+          row,
+          i - 1,
+          i
+        )
+      end
+    end
+  end
 end
 
 local function apply_highlights(lines)
@@ -107,14 +180,18 @@ local function apply_highlights(lines)
     local row = index - 1
     if vim.startswith(line, "Filter:") then
       api.nvim_buf_add_highlight(M.bufnr, ns, "CMakeTuiFilter", row, 0, -1)
+      highlight_key_hints(line, row)
     elseif vim.startswith(line, "Actions:") then
       api.nvim_buf_add_highlight(M.bufnr, ns, "CMakeTuiActions", row, 0, -1)
+      highlight_key_hints(line, row)
     elseif vim.startswith(line, "  No targets") then
       api.nvim_buf_add_highlight(M.bufnr, ns, "CMakeTuiMuted", row, 0, -1)
     else
       local first = line:sub(1, 1)
       if first == "▼" or first == "▶" then
         highlight_target_row(line, row)
+      elseif line:match("^%s*%- ") then
+        highlight_detail_bullet(line, row)
       elseif line:match("^%s+%S") then
         highlight_detail_row(line, row)
       end

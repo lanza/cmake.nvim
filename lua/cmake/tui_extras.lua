@@ -42,12 +42,20 @@ local badges = {
   other = "[OTH]",
 }
 
+local function short_path(path)
+  if type(path) ~= "string" or path == "" then
+    return "(unknown)"
+  end
+  return vim.fn.fnamemodify(path, ":~:.")
+end
+
 local function to_upper(str)
   return string.upper(str or "")
 end
 
 local function target_kind(target)
-  local target_type = to_upper(target.target_type or (target.is_exec and "EXECUTABLE"))
+  local fallback = target.is_exec and "EXECUTABLE" or nil
+  local target_type = to_upper(target.target_type or fallback)
   local name = target.current_target_name or target.name or ""
   if target.is_exec then
     return "executables", target_type
@@ -120,11 +128,82 @@ local function sorted_target_names(targets)
   return names
 end
 
+local function append_file_entry(acc, seen, entry)
+  if not entry then
+    return
+  end
+  if type(entry) == "string" then
+    if entry ~= "" and not seen[entry] then
+      seen[entry] = true
+      table.insert(acc, entry)
+    end
+    return
+  end
+  if type(entry) ~= "table" then
+    return
+  end
+  if type(entry.path) == "string" and entry.path ~= "" then
+    if not seen[entry.path] then
+      seen[entry.path] = true
+      table.insert(acc, entry.path)
+    end
+    return
+  end
+  if type(entry.file) == "string" and entry.file ~= "" then
+    if not seen[entry.file] then
+      seen[entry.file] = true
+      table.insert(acc, entry.file)
+    end
+  end
+  local iterator = vim.tbl_islist(entry) and ipairs or pairs
+  for _, value in iterator(entry) do
+    append_file_entry(acc, seen, value)
+  end
+end
+
+local function collect_files(target, keys)
+  if type(target) ~= "table" then
+    return {}
+  end
+  local acc = {}
+  local seen = {}
+  for _, key in ipairs(keys) do
+    append_file_entry(acc, seen, target[key])
+  end
+  return acc
+end
+
+local function append_file_section(lines, label, target, keys)
+  local files = collect_files(target, keys)
+  if #files == 0 then
+    return
+  end
+  table.insert(lines, "  " .. label .. ":")
+  local limit = vim.g.cmake_tui_detail_max_files or 10
+  if limit <= 0 then
+    limit = #files
+  end
+  for index, path in ipairs(files) do
+    if index > limit then
+      local remaining = #files - limit
+      table.insert(
+        lines,
+        string.format("    - ... (%d more)", remaining)
+      )
+      break
+    end
+    table.insert(lines, "    - " .. short_path(path))
+  end
+end
+
 local function detail_lines(target, info)
   local lines = {}
   table.insert(lines, "  type: " .. (info.target_type or "UNKNOWN"))
-  table.insert(lines, "  relative: " .. tostring(target.current_target_relative or ""))
-  table.insert(lines, "  file: " .. tostring(target.current_target_file or ""))
+  table.insert(
+    lines,
+    "  relative: " .. tostring(target.current_target_relative or "")
+  )
+  table.insert(lines, "  file: " .. short_path(target.current_target_file))
   table.insert(lines, "  kind: " .. info.kind)
   if target.args then
     local args = target.args
@@ -139,21 +218,52 @@ local function detail_lines(target, info)
     table.insert(lines, "  breakpoints:")
     for bp, info_bp in pairs(target.breakpoints) do
       local status = info_bp.enabled and "enabled" or "disabled"
-      table.insert(lines, "    " .. tostring(bp) .. ": " .. tostring(info_bp.text) .. " (" .. status .. ")")
+      table.insert(
+        lines,
+        "    "
+          .. tostring(bp)
+          .. ": "
+          .. tostring(info_bp.text)
+          .. " ("
+          .. status
+          .. ")"
+      )
     end
   end
+  append_file_section(lines, "sources", target, {
+    "sources",
+    "source_files",
+    "source_list",
+    "files",
+    "compile_files",
+  })
+  append_file_section(lines, "headers", target, {
+    "headers",
+    "header_files",
+    "include_files",
+    "public_headers",
+  })
   return lines
 end
 
 function M.render_lines(expanded_map)
   local targets = {}
-  if cmake.state and cmake.state.dir_cache_object and cmake.state.dir_cache_object.targets then
+  if
+    cmake.state
+    and cmake.state.dir_cache_object
+    and cmake.state.dir_cache_object.targets
+  then
     targets = cmake.state.dir_cache_object.targets
   end
 
   local lines = {}
   local label = M.get_filter_label()
-  table.insert(lines, "Filter: " .. label .. " (f next, a all, e exec, l libs, t tests)")
+  table.insert(
+    lines,
+    "Filter: "
+      .. label
+      .. " (f next, F prev, a all, e exec, l libs, t tests)"
+  )
   table.insert(lines, "Actions: <CR> expand  b build  r run  d debug  q close")
 
   local names = sorted_target_names(targets)
@@ -183,7 +293,13 @@ function M.extract_target_name(line)
 end
 
 local function lookup_target(name)
-  if not (cmake.state and cmake.state.dir_cache_object and cmake.state.dir_cache_object.targets) then
+  if
+    not (
+      cmake.state
+      and cmake.state.dir_cache_object
+      and cmake.state.dir_cache_object.targets
+    )
+  then
     return nil
   end
   return cmake.state.dir_cache_object.targets[name]

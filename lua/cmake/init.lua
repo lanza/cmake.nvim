@@ -302,9 +302,120 @@ function M.parse_codemodel_json()
 
   local targets = read_json_file(codemodel_file).configurations[1].targets
 
+  local function gather_paths(entries)
+    local collected = {}
+    local seen = {}
+    local function add_path(path)
+      if type(path) ~= "string" or path == "" then
+        return
+      end
+      if not seen[path] then
+        seen[path] = true
+        table.insert(collected, path)
+      end
+    end
+    local function handle_entry(entry)
+      if type(entry) == "string" then
+        add_path(entry)
+        return
+      end
+      if type(entry) ~= "table" then
+        return
+      end
+      if entry.path then
+        add_path(entry.path)
+      end
+      if entry.source then
+        handle_entry(entry.source)
+      end
+      if entry.files then
+        for _, nested in ipairs(entry.files) do
+          handle_entry(nested)
+        end
+      end
+      if entry.entries then
+        for _, nested in ipairs(entry.entries) do
+          handle_entry(nested)
+        end
+      end
+      if entry.sources then
+        for _, nested in ipairs(entry.sources) do
+          handle_entry(nested)
+        end
+      end
+      if entry.headers then
+        for _, nested in ipairs(entry.headers) do
+          handle_entry(nested)
+        end
+      end
+    end
+    if type(entries) == "table" then
+      if vim.tbl_islist(entries) then
+        for _, entry in ipairs(entries) do
+          handle_entry(entry)
+        end
+      else
+        for _, entry in pairs(entries) do
+          handle_entry(entry)
+        end
+      end
+    end
+    return collected
+  end
+
+  local function is_header(path)
+    local lower = string.lower(path)
+    if lower:match("%.inl$") or lower:match("%.inc$") or lower:match("%.tcc$") then
+      return true
+    end
+    local ext = lower:match("%.([%w%+]+)$")
+    if not ext then
+      return false
+    end
+    return ext:sub(1, 1) == "h"
+  end
+
+  local function split_sources(all_paths)
+    local sources = {}
+    local headers = {}
+    local seen = {}
+    for _, path in ipairs(all_paths) do
+      if not seen[path] then
+        seen[path] = true
+        if is_header(path) then
+          table.insert(headers, path)
+        else
+          table.insert(sources, path)
+        end
+      else
+        -- already recorded
+      end
+    end
+    return sources, headers
+  end
+
   for _, target in pairs(targets) do
     local name = target.name
     local target_file_data = read_json_file(cmake_query_response_dir .. target.jsonFile)
+
+    local gathered_sources = gather_paths(target_file_data.sources)
+    if type(target_file_data.sourceGroups) == "table" then
+      for _, group in ipairs(target_file_data.sourceGroups) do
+        if type(group.sources) == "table" then
+          local from_group = gather_paths(group.sources)
+          vim.list_extend(gathered_sources, from_group)
+        end
+      end
+    end
+    if type(target_file_data.fileSets) == "table" then
+      for _, fileset in ipairs(target_file_data.fileSets) do
+        if type(fileset.entries) == "table" then
+          local from_fileset = gather_paths(fileset.entries)
+          vim.list_extend(gathered_sources, from_fileset)
+        end
+      end
+    end
+    local source_paths, header_paths = split_sources(gathered_sources)
 
     local artifacts = target_file_data.artifacts
     if artifacts then
@@ -321,6 +432,8 @@ function M.parse_codemodel_json()
         breakpoints = {},
         is_exec = is_exec,
         target_type = target_file_data.type,
+        sources = source_paths,
+        headers = header_paths,
       }
     else
       M.get_dco().phoney_targets[name] = {
