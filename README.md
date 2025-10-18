@@ -43,6 +43,27 @@ Surface build/configure progress in your statusline via
 `%{v:lua.require('cmake').statusline()}`, and watch for inline virtual-text updates on the
 active buffer as commands complete.
 
+## Statusline integration
+
+To display the current CMake state in lualine, add the statusline function as a custom
+component inside your `lualine.setup` call:
+
+```lua
+require('lualine').setup({
+  sections = {
+    lualine_c = {
+      'filename',
+      function()
+        return require('cmake').statusline()
+      end,
+    },
+  },
+})
+```
+
+Place the component in whichever section works for your layout; the helper returns an
+empty string when idle so it will not clutter your statusline.
+
 Run the project's CTest suite with `:CMakeRunTests`; failures populate the quickfix list
 and are highlighted in the statusline. Use `:CMakeRerunFailedTests` to retry only the most
 recently failing cases (leveraging `ctest --rerun-failed`). Configure the executable and
