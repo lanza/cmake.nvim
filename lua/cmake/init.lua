@@ -114,13 +114,17 @@ function M.write_cache_file()
   vim.fn.writefile(split, M.state.cache_file_path)
 end
 
+local function find_file(path, pattern)
+  return vim.fs.find(function(name, _)
+    return name:match(pattern)
+  end, { path = path})
+end
+
 ---@private
 function M.has_query_reply()
   local build_dir = M.get_build_dir()
-  return #vim.fs.find(function(name, _)
-    return name:match("codemodel*")
-  end, { path = codemodel_path }) > 0
   local codemodel_path = vim.env.PWD .. "/" .. build_dir .. "/.cmake/api/v1/reply/"
+  return #find_file(codemodel_path, "codemodel*") > 0
 end
 
 ---@private
