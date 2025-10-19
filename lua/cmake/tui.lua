@@ -261,19 +261,17 @@ function M.open()
   -- resize to desired width
   vim.cmd('vertical resize ' .. width)
   -- show a non-selectable header via the winbar so the pane is easy to spot
-  -- use pcall in case winbar is not supported
-  pcall(api.nvim_win_set_option, M.winid, 'winbar', ' CMake Targets ')
   -- buffer options
-  api.nvim_buf_set_option(M.bufnr, 'bufhidden', 'wipe')
-  api.nvim_buf_set_option(M.bufnr, 'buftype', 'nofile')
-  api.nvim_buf_set_option(M.bufnr, 'swapfile', false)
-  api.nvim_buf_set_option(M.bufnr, 'filetype', 'cmake_tui')
+  vim.bo.bufhidden = 'wipe'
+  vim.bo.buftype = 'nofile'
+  vim.bo.swapfile = false
+  vim.bo.filetype = 'cmake_tui'
   -- window options
-  api.nvim_win_set_option(M.winid, 'wrap', false)
-  api.nvim_win_set_option(M.winid, 'cursorline', true)
-  api.nvim_win_set_option(M.winid, 'number', false)
-  api.nvim_win_set_option(M.winid, 'relativenumber', false)
-
+  vim.wo.winbar = ' CMake Targets '
+  vim.wo.wrap = false
+  vim.wo.cursorline = true
+  vim.wo.number = false
+  vim.wo.relativenumber = false
 
   local opts = { noremap = true, silent = true, buffer = M.bufnr }
   vim.keymap.set("n", "<CR>", M.toggle_target, opts)
