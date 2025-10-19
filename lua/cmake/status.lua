@@ -44,7 +44,7 @@ local function set_virtual_text(text, hl)
     end
     api.nvim_buf_clear_namespace(buf, ns, 0, -1)
     local line = math.max(api.nvim_buf_line_count(buf) - 1, 0)
-    last_extmark = api.nvim_buf_set_extmark(buf, ns, line, 0, {
+    _ = api.nvim_buf_set_extmark(buf, ns, line, 0, {
       virt_text = { { text, highlight(hl, "Comment") } },
       virt_text_pos = "eol",
     })
