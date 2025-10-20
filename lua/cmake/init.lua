@@ -51,14 +51,14 @@ end
 
 ---@private
 local function save_build_tool(tool)
-  vim.g.saved_cmake_build_tool = vim.g.cmake_build_tool
-  vim.g.cmake_build_tool = tool or "vsplit"
+  M.saved_build_tool = M.build_tool
+  M.build_tool = tool or "vsplit"
 end
 
 ---@private
 local function restore_build_tool()
-  vim.g.cmake_build_tool = vim.g.saved_cmake_build_tool
-  vim.g.saved_cmake_build_tool = nil
+  M.build_tool = M.save_build_tool
+  M.save_build_tool = nil
 end
 
 ---@private
@@ -111,13 +111,13 @@ function M.write_cache_file()
   local cache_file = M.state.global_cache_object
   local serial = vim.fn.json_encode(cache_file)
   local split = vim.fn.split(serial, "\n")
-  vim.fn.writefile(split, M.state.cache_file_path)
+  vim.fn.writefile(split, M.cache_file_path)
 end
 
 local function find_file(path, pattern)
   return vim.fs.find(function(name, _)
     return name:match(pattern)
-  end, { path = path})
+  end, { path = path })
 end
 
 ---@private
@@ -145,7 +145,7 @@ function M.perform_build(completion)
   local target = M.get_current_target_name()
   status.build_started(target)
 
-  if vim.g.cmake_build_tool == "vsplit" then
+  if M.build_tool == "vsplit" then
     local command = "cmake --build " .. M.get_build_dir() .. " --target " .. target
     ui.get_only_window()
     local capture = diagnostics.start_capture({
@@ -165,7 +165,7 @@ function M.perform_build(completion)
         end
       end,
     })
-  elseif vim.g.cmake_build_tool == "vim-dispatch" then
+  elseif M.build_tool == "vim-dispatch" then
     vim.o.makeprg = M.state.build_command .. " -C " .. build_dir .. " " .. target
     --   " completion not honored
     vim.cmd.Make()
@@ -462,8 +462,8 @@ end
 function M.configure_and_generate(completion)
   status.configure_started("configure")
   if vim.fn.filereadable(M.get_source_dir() .. "/CMakeLists.txt") == 0 then
-    if vim.g.cmake_template_file ~= nil then
-      vim.fn.filecopy(vim.g.cmake_template_file, M.get_source_dir() .. "/CMakeLists.txt")
+    if M.cmakelists_template_file then
+      vim.fn.filecopy(M.cmakelists_template_file, M.get_source_dir() .. "/CMakeLists.txt")
     else
       print("Could not find a CMakeLists at directory " .. M.get_cmake_source_dir())
     end
@@ -602,15 +602,15 @@ end
 
 function M.cmake_build_all()
   M.ensure_parsed(function()
-    if vim.g.cmake_build_tool == "vsplit" then
+    if M.build_tool == "vsplit" then
       local command = "cmake --build " .. M.get_build_dir()
       ui.get_only_window()
       vim.fn.termopen(command)
-    elseif vim.g.cmake_build_tool == "vim-dispatch" then
+    elseif M.build_tool == "vim-dispatch" then
       local cwd = vim.fn.getcwd()
       vim.o.makeprg = M.state.build_command .. " -C " .. cwd .. "/" .. M.get_build_dir()
     else
-      print("vim.g.cmake_build_tool value is invalid (vsplit or vim-dispatch)")
+      print("M.build_tool value is invalid (vsplit or vim-dispatch)")
     end
   end)
 end
@@ -901,28 +901,23 @@ function M.cmake_run_lit_on_file()
     lit_path = bin_lit_path
   end
   ui.get_only_window()
-  vim.fn.termopen({ lit_path, M.state.extra_lit_args, full_path })
+  vim.fn.termopen({ lit_path, M.extra_lit_args, full_path })
 end
 
 function M.initialize_cache_file()
   local cwd = vim.fn.getcwd()
 
-  local template_file = vim.g.cmake_template_file or vim.fn.expand(":p:h:h" .. "/CMakeLists.txt")
-  local default_build_dir = vim.g.cmake_default_build_dir or "build"
-  local extra_lit_args = vim.g.cmake_extra_lit_args or "-a"
-  local cache_file_path = vim.g.cmake_cache_file_path or vim.env.HOME .. "/.cmake.nvim.json"
-
-  local global_cache_object = (function()
+  local global_cache_object = (function(cache_file_path)
     if vim.fn.filereadable(cache_file_path) == 0 then
       vim.fn.writefile({ "{}" }, cache_file_path)
     end
     return read_json_file(cache_file_path)
-  end)()
+  end)(M.global_cache_file)
 
   if global_cache_object[cwd] == nil then
     global_cache_object[cwd] = {
       cmake_arguments = {},
-      build_dir = default_build_dir,
+      build_dir = M.default_build_dir,
       source_dir = ".",
       targets = {},
       phoney_targets = {},
@@ -934,12 +929,9 @@ function M.initialize_cache_file()
   local current_target_cache_object = dir_cache_object.targets[dir_cache_object.current_target_name]
 
   M.state = {
-    template_file = template_file,
     cmake_tool = "cmake",
     generator = "Ninja",
     build_command = "ninja",
-    extra_lit_args = extra_lit_args,
-    cache_file_path = cache_file_path,
     global_cache_object = global_cache_object,
     dir_cache_object = dir_cache_object,
     current_target_cache_object = current_target_cache_object,
@@ -949,12 +941,14 @@ function M.initialize_cache_file()
   M.state.current_target_cache_object = M.state.dir_cache_object.targets[ct]
 end
 
-function M.setup(opts)
+function M.setup(_, opts)
   ui.setup(opts)
 
-  if not vim.g.cmake_build_tool then
-    vim.g.cmake_build_tool = 'vsplit'
-  end
+  M.cmakelists_template_file = opts.cmakelists_template_file or vim.fn.expand(":p:h:h" .. "/CMakeLists.txt")
+  M.build_tool = opts.build_tool or "vsplit"
+  M.default_build_dir = opts.default_build_dir or "build"
+  M.extra_lit_args = opts.extra_lit_args or "-a"
+  M.global_cache_file = opts.global_cache_file or vim.env.HOME .. "/.cmake.nvim.json"
 
   M.initialize_cache_file()
 end
