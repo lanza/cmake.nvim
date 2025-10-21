@@ -941,7 +941,7 @@ function M.initialize_cache_file()
   M.state.current_target_cache_object = M.state.dir_cache_object.targets[ct]
 end
 
-function M.setup(_, opts)
+function M.setup(opts)
   ui.setup(opts)
 
   M.cmakelists_template_file = opts.cmakelists_template_file or vim.fn.expand(":p:h:h" .. "/CMakeLists.txt")
