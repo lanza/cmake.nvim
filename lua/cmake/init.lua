@@ -948,7 +948,7 @@ function M.setup(opts)
   M.build_tool = opts.build_tool or "vsplit"
   M.default_build_dir = opts.default_build_dir or "build"
   M.extra_lit_args = opts.extra_lit_args or "-a"
-  M.global_cache_file = opts.global_cache_file or vim.env.HOME .. "/.cmake.nvim.json"
+  M.global_cache_file = vim.fs.abspath(opts.global_cache_file or vim.env.HOME .. "/.cmake.nvim.json")
 
   M.initialize_cache_file()
 end
