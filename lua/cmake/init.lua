@@ -508,10 +508,10 @@ end
 
 ---@private
 function M.ensure_selected_target(completion)
-  if M.has_set_target() then
-    completion()
-  else
-    M.ensure_parsed(function()
+  M.ensure_parsed(function()
+    if M.has_set_target() then
+      _ = completion and completion(M.get_current_target_name())
+    else
       M.select_target(function(target_name)
         if not M.get_ctco() then
           print("Could not select target")
@@ -519,8 +519,8 @@ function M.ensure_selected_target(completion)
           _ = completion and completion(target_name)
         end
       end)
-    end)
-  end
+    end
+  end)
 end
 
 ---@private
