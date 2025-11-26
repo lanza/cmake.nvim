@@ -129,6 +129,7 @@ end
 
 ---@private
 function M.ensure_built_current_target(completion)
+  print("[cmake.nvim] ensure_built_current_target: Ensuring target is selected before building")
   M.ensure_selected_target(function()
     M.perform_build(completion)
   end)
@@ -307,6 +308,7 @@ end
 
 ---@private
 function M.parse_codemodel_json()
+  print("[cmake.nvim] parse_codemodel_json: Starting to parse codemodel")
   local build_dir = M.get_build_dir()
   local cmake_query_response_dir = build_dir .. "/.cmake/api/v1/reply/"
   local codemodel_file = globpath(cmake_query_response_dir, "codemodel*")[1]
@@ -314,6 +316,7 @@ function M.parse_codemodel_json()
   assert(codemodel_file ~= nil, "Query reply should be set when calling parse_codemodel_json")
 
   local targets = read_json_file(codemodel_file).configurations[1].targets
+  print("[cmake.nvim] parse_codemodel_json: Found " .. #targets .. " targets to parse")
 
   local function gather_paths(entries)
     local collected = {}
@@ -455,14 +458,17 @@ function M.parse_codemodel_json()
     end
   end
 
+  print("[cmake.nvim] parse_codemodel_json: Parsing completed successfully")
   return true
 end
 
 ---@private
 function M.configure_and_generate(completion)
+  print("[cmake.nvim] configure_and_generate: Starting CMake configuration and generation")
   status.configure_started("configure")
   if vim.fn.filereadable(M.get_source_dir() .. "/CMakeLists.txt") == 0 then
     if M.cmakelists_template_file then
+      print("[cmake.nvim] configure_and_generate: CMakeLists.txt not found, copying from template")
       vim.fn.filecopy(M.cmakelists_template_file, M.get_source_dir() .. "/CMakeLists.txt")
     else
       print("Could not find a CMakeLists at directory " .. M.get_cmake_source_dir())
@@ -470,14 +476,16 @@ function M.configure_and_generate(completion)
   end
 
   local command = M.state.cmake_tool .. " " .. M.get_cmake_argument_string()
+  print("[cmake.nvim] configure_and_generate: Running command: " .. command)
   ui.get_only_window()
   vim.fn.termopen(vim.fn.split(command), {
     on_exit = function(_, exit_code, _)
       if exit_code ~= 0 then
-        print("CMake configuration/generation failed")
+        print("[cmake.nvim] configure_and_generate: FAILED with exit code " .. exit_code)
         status.configure_finished(false)
         return
       end
+      print("[cmake.nvim] configure_and_generate: Completed successfully")
       status.configure_finished(true)
       compile_commands.auto_sync(M.get_build_dir(), M.get_source_dir())
       _ = completion and completion()
@@ -488,8 +496,10 @@ end
 ---@private
 function M.ensure_generated(completion)
   if M.has_query_reply() then
+    print("[cmake.nvim] ensure_generated: Query reply already exists, skipping generation")
     _ = completion and completion()
   else
+    print("[cmake.nvim] ensure_generated: No query reply found, performing configure and generate")
     M.configure_and_generate(completion)
   end
 end
@@ -497,8 +507,10 @@ end
 ---@private
 function M.ensure_parsed(completion)
   if #M.get_dco().targets > 0 then
+    print("[cmake.nvim] ensure_parsed: Targets already parsed (count: " .. #M.get_dco().targets .. "), skipping parse")
     _ = completion and completion()
   else
+    print("[cmake.nvim] ensure_parsed: No targets found, performing generation and parsing")
     M.ensure_generated(function()
       M.parse_codemodel_json()
       _ = completion and completion()
@@ -510,8 +522,11 @@ end
 function M.ensure_selected_target(completion)
   M.ensure_parsed(function()
     if M.has_set_target() then
+      print("[cmake.nvim] ensure_selected_target: Target already set (" ..
+      M.get_current_target_name() .. "), skipping selection")
       _ = completion and completion(M.get_current_target_name())
     else
+      print("[cmake.nvim] ensure_selected_target: No target selected, prompting user for selection")
       M.select_target(function(target_name)
         if not M.get_ctco() then
           print("Could not select target")
