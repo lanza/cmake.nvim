@@ -907,6 +907,11 @@ end
 function M.initialize_cache_file()
   local cwd = vim.fn.getcwd()
 
+  -- Ensure global_cache_file is set, use default if not
+  if not M.global_cache_file or M.global_cache_file == '' then
+    M.global_cache_file = vim.fs.abspath(vim.env.HOME .. "/.cmake.nvim.json")
+  end
+
   local global_cache_object = (function(cache_file_path)
     if vim.fn.filereadable(cache_file_path) == 0 then
       vim.fn.writefile({ "{}" }, cache_file_path)
