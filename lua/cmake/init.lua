@@ -111,7 +111,7 @@ function M.write_cache_file()
   local cache_file = M.state.global_cache_object
   local serial = vim.fn.json_encode(cache_file)
   local split = vim.fn.split(serial, "\n")
-  vim.fn.writefile(split, M.cache_file_path)
+  vim.fn.writefile(split, M.global_cache_file)
 end
 
 local function find_file(path, pattern)
