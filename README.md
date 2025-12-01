@@ -1,74 +1,112 @@
-A simple CMake addon for neovim
+# cmake.nvim
 
-Provides these commands:
-* CMakeSetBuildDir
-    * Obvious
-* CMakeSetSourceDir
-    * Obvious
-* CMakeArgs
-    * Poorly named and implemented command that sets the args for the
-      cmake invocation
-* CMakeTargetArgs
-    * Poorly named and implemented command that sets the args for the
-      currently selected command for use with CMakeRun
-* CMakeCompileFile
-    * Broken?
-* CMakeDebug
-    * Select a target to launch in the nvim-gdb debugger --
-        https://github.com/sakhnik/nvim-gdb
-* CMakeRunCurrentTarget
-* CMakeRunTarget
-* CMakePickTarget
-* CMakeBuild
-* CMakeBuildTarget
-* CMakeBuildNonArtifacts
-* CMakeConfigureAndGenerate
-* CMDBConfigureAndGenerate
-* CMakeBreakpoints
-* CMakeSyncCompileCommands
-* CMakeRunTests
-* CMakeRerunFailedTests
-* CMakeShowDiagnostics
+CMake integration for Neovim.
 
-Set `g:cmake_auto_sync_compile_commands = true` to copy or link the `compile_commands.json`
-from the active build directory into the source tree after configure/generate. Override
-the behavior with `g:cmake_compile_commands_sync_method = "copy"` if symlinks are not
-desirable.
+## Features
 
-Use `:lua require('cmake.tui').toggle()` to open the target browser. Filter targets with
-`f`/`F` to cycle or `a`/`e`/`l`/`t` for direct selection, and trigger actions on the
-highlighted target with `b` (build), `r` (run), or `d` (debug).
+- Configure and build CMake projects
+- Target selection and management
+- Debugger integration (GDB, LLDB, nvim-dap)
+- CTest integration
+- Build diagnostics with quickfix support
+- Interactive TUI for target browsing
+- Statusline integration
+- Automatic compile_commands.json sync
 
-Surface build/configure progress in your statusline via
-`%{v:lua.require('cmake').statusline()}`, and watch for inline virtual-text updates on the
-active buffer as commands complete.
+## Commands
 
-## Statusline integration
+### Configuration
+- `:CMakeSetBuildDir <dir>` - Set build directory
+- `:CMakeSetSourceDir <dir>` - Set source directory
+- `:CMakeSetCMakeArgs <args>` - Set CMake arguments
+- `:CMakeConfigureAndGenerate` - Run CMake configuration
 
-To display the current CMake state in lualine, add the statusline function as a custom
-component inside your `lualine.setup` call:
+### Building
+- `:CMakeBuildCurrentTarget` - Build selected target
+- `:CMakeBuildAll` - Build all targets
+- `:CMakeClean` - Clean build artifacts
+
+### Targets
+- `:CMakePickTarget` - Select a build target
+- `:CMakePickExecutableTarget` - Select an executable target
+- `:CMakeRunCurrentTarget` - Build and run selected target
+- `:CMakeSetCurrentTargetRunArgs <args>` - Set runtime arguments
+
+### Testing
+- `:CMakeRunTests` - Run CTest suite
+- `:CMakeRerunFailedTests` - Rerun failed tests only
+
+### Debugging
+- `:CMakeDebugWithNvimGDB` - Debug with GDB
+- `:CMakeDebugWithNvimLLDB` - Debug with LLDB
+- `:CMakeDebugWithNvimDapLLDBVSCode` - Debug with nvim-dap
+- `:CMakeToggleFileLineBreakpoint` - Toggle breakpoint at cursor
+- `:CMakeToggleFileLineColumnBreakpoint` - Toggle column-specific breakpoint
+- `:CMakeListBreakpoints` - List all breakpoints
+- `:CMakeToggleBreakAtMain` - Toggle break-at-main behavior
+
+### Diagnostics
+- `:CMakeShowDiagnostics` - Show build diagnostics and errors
+- `:CMakeSyncCompileCommands` - Sync compile_commands.json to source dir
+
+## Setup
+
+```lua
+require('cmake').setup({
+  build_tool = "vsplit",           -- "vsplit" or "vim-dispatch"
+  default_build_dir = "build",
+  global_cache_file = vim.env.HOME .. "/.cmake.nvim.json",
+})
+```
+
+## Target Browser (TUI)
+
+Open with `:lua require('cmake.tui').toggle()`
+
+Keybindings:
+- `f`/`F` - Cycle through filter modes
+- `a` - Show all targets
+- `e` - Show executable targets
+- `l` - Show library targets
+- `t` - Show test targets
+- `b` - Build highlighted target
+- `r` - Run highlighted target
+- `d` - Debug highlighted target
+
+## Statusline Integration
+
+Add to your statusline or lualine:
+
+```lua
+require('cmake').statusline()
+```
+
+Example with lualine:
 
 ```lua
 require('lualine').setup({
   sections = {
     lualine_c = {
       'filename',
-      function()
-        return require('cmake').statusline()
-      end,
+      function() return require('cmake').statusline() end,
     },
   },
 })
 ```
 
-Place the component in whichever section works for your layout; the helper returns an
-empty string when idle so it will not clutter your statusline.
+## Compile Commands
 
-Run the project's CTest suite with `:CMakeRunTests`; failures populate the quickfix list
-and are highlighted in the statusline. Use `:CMakeRerunFailedTests` to retry only the most
-recently failing cases (leveraging `ctest --rerun-failed`). Configure the executable and
-extra arguments with `g:cmake_ctest_executable` and `g:cmake_ctest_args` if needed.
+Set `g:cmake_auto_sync_compile_commands = true` to automatically sync `compile_commands.json` from build directory to source tree after configuration.
 
-Inspect the most recent build's diagnostics with `:CMakeShowDiagnostics`. Detected GCC
-/ Clang / MSVC-style errors and warnings are listed alongside a tail of the raw log, and
-errors populate the quickfix list automatically when present.
+Override sync method with `g:cmake_compile_commands_sync_method = "copy"` (default is symlink).
+
+## Configuration Options
+
+- `g:cmake_auto_sync_compile_commands` - Auto-sync compile_commands.json (default: false)
+- `g:cmake_compile_commands_sync_method` - Sync method: "symlink" or "copy" (default: "symlink")
+- `g:cmake_ctest_executable` - CTest executable path (default: "ctest")
+- `g:cmake_ctest_args` - Additional CTest arguments
+
+## Cache File
+
+Per-project settings (targets, args, directories) are stored in `~/.cmake.nvim.json` by default. Override with the `global_cache_file` setup option.
